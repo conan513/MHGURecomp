@@ -322,7 +322,7 @@ bool parse_number(const std::wstring &text, double &out) {
     return end != s.c_str() && *end == '\0' && out == out;
 }
 
-bool validate_quests(const std::wstring &text, std::map<std::wstring, std::wstring> &quest_values) {
+bool validate_quests(const std::wstring &text, std::map<std::wstring, std::string> &quest_values) {
     std::wstring input = text;
     size_t pos = 0;
     while (pos <= input.size()) {
@@ -413,7 +413,7 @@ void fill_controls(const Settings &s) {
     set_control_text(QUESTS, s.quests);
 }
 
-bool validate_and_collect(Settings &s, std::map<std::wstring, std::wstring> &quest_values) {
+bool validate_and_collect(Settings &s, std::map<std::wstring, std::string> &quest_values) {
     for (const Field &f : fields) {
         std::wstring value = get_control_text(f.id);
         switch (f.id) {
@@ -491,7 +491,7 @@ bool validate_and_collect(Settings &s, std::map<std::wstring, std::wstring> &que
     return validate_quests(get_control_text(QUESTS), quest_values);
 }
 
-bool save_settings(const Settings &s, const std::map<std::wstring, std::wstring> &quest_values) {
+bool save_settings(const Settings &s, const std::map<std::wstring, std::string> &quest_values) {
     std::map<std::wstring, std::string> updates;
     for (const Field &f : fields)
         updates[squash(f.section) + L"|" + squash(f.key)] = wide_to_utf8(get_field_value(f.id, s));
@@ -699,7 +699,7 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lp
         case SAVE:
         case SAVE_AND_LAUNCH: {
             Settings changed = g_settings;
-            std::map<std::wstring, std::wstring> quests;
+            std::map<std::wstring, std::string> quests;
             if (!apply_form(changed, quests)) return 0;
             g_settings = changed;
             if (LOWORD(wparam) == SAVE_AND_LAUNCH) launch_game();
