@@ -38,6 +38,7 @@ Status: fully playable, but there may be some bugs. I've played a dozen hunts wi
    ```
    MHGURecomp\
      mhgurecomp.exe
+     MHGU-Launcher.exe
      mhgugame.dll
      (other .dll files)
      data\
@@ -54,7 +55,7 @@ Status: fully playable, but there may be some bugs. I've played a dozen hunts wi
 
    `exefs` must come from the 1.4.0 update, and `romfs` must be the base game's romfs with the update's files
    merged over it.
-3. Start `mhgurecomp.exe`.
+3. Start `MHGU-Launcher.exe` to edit the settings and launch the game, or start `mhgurecomp.exe` directly.
 
 If the files are missing or the wrong version, a message box says so.
 
@@ -62,7 +63,7 @@ If the files are missing or the wrong version, a message box says so.
 
 | What | Where |
 | --- | --- |
-| Settings | `mhgurecomp.ini` next to the exe (written with the defaults on first start; delete it to reset) |
+| Settings | `mhgurecomp.ini` next to the exe (written with the defaults on first game start; the launcher can edit it) |
 | Save data | `%APPDATA%\MHGURecomp\save\` (kept apart from the game folder so updating the port can't touch it) |
 | Log | `log.txt` next to the exe (look here first when something goes wrong) |
 | Screenshots | `shots\` next to the exe (F12) |
@@ -101,7 +102,9 @@ Other keys: Alt+Enter switches between windowed and full screen, F12 takes a scr
 
 ## Settings
 
-Everything is in `mhgurecomp.ini`; each setting is explained in the file itself. In short:
+Everything is in `mhgurecomp.ini`; each setting is explained in the file itself. On Windows, the
+`MHGU-Launcher.exe` companion can edit all settings, including per-quest HP multipliers, save them, and start the
+game. The ini file can still be edited manually. In short:
 
 - `[Display]`: `Mode` (Borderless / Fullscreen / Windowed), `Resolution`, `RenderResolution` (the 3D resolution)
 - `[Anti-aliasing]`: `MSAA` (Off / 2x / 4x / 8x), `FXAA` (On / Off)

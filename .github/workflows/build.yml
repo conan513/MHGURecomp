@@ -44,4 +44,5 @@ jobs:
           name: MHGURecomp-MHW-Controls-Windows
           path: |
             build/mhgurecomp.exe
+            build/MHGU-Launcher.exe
             build/*.dll
