@@ -78,8 +78,8 @@ int main(int argc, char **argv) {
     for (int i = 1; i < argc; i++)
         if (argv[i][0] != '-') g_game_dir = argv[i], given = true;
     if (getenv("MHGU_GAME_DIR")) g_game_dir = getenv("MHGU_GAME_DIR"), given = true;
-    if (!given) {  // standalone (the build folder): data\ holds the game files; caches, mods and log.txt beside, saves
-        plat_standalone();  // in the player's folder (%APPDATA%\MHGURecomp\save)
+    if (!given) {  // standalone (the build folder): data\ holds the game files; settings and all generated files stay local
+        plat_standalone();
         static char data[1100] = "data";
         char exe[1024];
         if (getenv("MHGU_HOME") && plat_exe_path(exe, sizeof exe)) {  // (running elsewhere: the files beside the exe)

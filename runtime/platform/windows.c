@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <timeapi.h>
+#include <wchar.h>
 
 #include "../platform.h"
 
@@ -121,8 +122,13 @@ void plat_init(void) {
 }
 
 bool plat_exe_path(char *buf, size_t size) {
-    DWORD n = GetModuleFileNameA(NULL, buf, (DWORD)size);
-    return n > 0 && n < size;
+    wchar_t path[32768];
+    DWORD n = GetModuleFileNameW(NULL, path, sizeof(path) / sizeof(*path));
+    if (!n || n >= sizeof(path) / sizeof(*path)) return false;
+    int bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, path, (int)n, buf, (int)size, NULL, NULL);
+    if (!bytes || (size_t)bytes >= size) return false;
+    buf[bytes] = 0;
+    return true;
 }
 
 // Started on its own (no game folder given): run in the executable's folder (MHGU_HOME: in that folder instead, created
@@ -131,14 +137,18 @@ bool plat_exe_path(char *buf, size_t size) {
 static bool g_own_log;
 
 void plat_standalone(void) {
-    char exe[MAX_PATH];
-    const char *home = getenv("MHGU_HOME");
-    if (home && *home) {
-        CreateDirectoryA(home, NULL);
-        SetCurrentDirectoryA(home);
-    } else if (plat_exe_path(exe, sizeof exe)) {
-        char *s = strrchr(exe, '\\');
-        if (s) { *s = 0; SetCurrentDirectoryA(exe); }
+    wchar_t home[32768];
+    DWORD home_len = GetEnvironmentVariableW(L"MHGU_HOME", home, sizeof(home) / sizeof(*home));
+    if (home_len && home_len < sizeof(home) / sizeof(*home)) {
+        CreateDirectoryW(home, NULL);
+        SetCurrentDirectoryW(home);
+    } else {
+        wchar_t exe[32768];
+        DWORD n = GetModuleFileNameW(NULL, exe, sizeof(exe) / sizeof(*exe));
+        if (n && n < sizeof(exe) / sizeof(*exe)) {
+            wchar_t *slash = wcsrchr(exe, L'\\');
+            if (slash) { *slash = 0; SetCurrentDirectoryW(exe); }
+        }
     }
     DWORD ids[2];
     if (GetConsoleProcessList(ids, 2) == 1) {  // (from a terminal the terminal shares it: keep logging there)
@@ -147,28 +157,153 @@ void plat_standalone(void) {
     }
 }
 
-// %APPDATA%\MHGURecomp (Roaming). The runtime opens files with the narrow (ANSI code page) functions, so a path the
-// code page can't spell (a user name in another script) is handed out in its 8.3 short form instead.
-bool plat_user_dir(char *buf, size_t size) {
+static bool legacy_user_dir(wchar_t *dir, size_t size) {
     PWSTR base = NULL;
     if (SHGetKnownFolderPath(&FOLDERID_RoamingAppData, KF_FLAG_CREATE, NULL, &base) != S_OK) {
         CoTaskMemFree(base);
         return false;
     }
-    wchar_t dir[MAX_PATH];
-    int n = _snwprintf(dir, MAX_PATH, L"%ls\\MHGURecomp", base);
+    int n = _snwprintf(dir, size, L"%ls\\MHGURecomp", base);
     CoTaskMemFree(base);
-    if (n < 0 || n >= MAX_PATH) return false;
-    CreateDirectoryW(dir, NULL);
-    if (GetFileAttributesW(dir) == INVALID_FILE_ATTRIBUTES) return false;
+    if (n < 0 || (size_t)n >= size) return false;
+    return true;
+}
+
+static bool wide_join(wchar_t *path, size_t size, const wchar_t *directory, const wchar_t *name) {
+    size_t directory_len = wcslen(directory), name_len = wcslen(name);
+    bool separator = directory_len && directory[directory_len - 1] != L'\\' && directory[directory_len - 1] != L'/';
+    if (directory_len + separator + name_len + 1 > size) return false;
+    memcpy(path, directory, directory_len * sizeof(*path));
+    if (separator) path[directory_len++] = L'\\';
+    memcpy(path + directory_len, name, (name_len + 1) * sizeof(*path));
+    return true;
+}
+
+static bool copy_save_tree(const wchar_t *source, const wchar_t *destination) {
+    if (!CreateDirectoryW(destination, NULL)) return false;
+    wchar_t search[32768], from[32768], to[32768];
+    if (!wide_join(search, sizeof(search) / sizeof(*search), source, L"*")) return false;
+    WIN32_FIND_DATAW entry;
+    HANDLE find = FindFirstFileW(search, &entry);
+    if (find == INVALID_HANDLE_VALUE) return false;
+
+    bool ok = true;
+    do {
+        if (!wcscmp(entry.cFileName, L".") || !wcscmp(entry.cFileName, L"..")) continue;
+        if (!wide_join(from, sizeof(from) / sizeof(*from), source, entry.cFileName) ||
+            !wide_join(to, sizeof(to) / sizeof(*to), destination, entry.cFileName)) {
+            ok = false;
+            break;
+        }
+        if (entry.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+            ok = false;
+            break;
+        }
+        if (entry.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            if (!copy_save_tree(from, to)) { ok = false; break; }
+        } else if (!CopyFileW(from, to, TRUE)) {
+            ok = false;
+            break;
+        }
+    } while (FindNextFileW(find, &entry));
+    if (GetLastError() != ERROR_NO_MORE_FILES) ok = false;
+    FindClose(find);
+    return ok;
+}
+
+static void remove_save_tree(const wchar_t *path) {
+    DWORD attributes = GetFileAttributesW(path);
+    if (attributes == INVALID_FILE_ATTRIBUTES) return;
+    if (!(attributes & FILE_ATTRIBUTE_DIRECTORY) || (attributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+        DeleteFileW(path);
+        return;
+    }
+    wchar_t search[32768], child[32768];
+    if (wide_join(search, sizeof(search) / sizeof(*search), path, L"*")) {
+        WIN32_FIND_DATAW entry;
+        HANDLE find = FindFirstFileW(search, &entry);
+        if (find != INVALID_HANDLE_VALUE) {
+            do {
+                if (!wcscmp(entry.cFileName, L".") || !wcscmp(entry.cFileName, L"..")) continue;
+                if (wide_join(child, sizeof(child) / sizeof(*child), path, entry.cFileName))
+                    remove_save_tree(child);
+            } while (FindNextFileW(find, &entry));
+            FindClose(find);
+        }
+    }
+    RemoveDirectoryW(path);
+}
+
+static bool ansi_path(const wchar_t *path, char *buf, size_t size) {
     BOOL lossy = FALSE;
-    int len = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, dir, -1, buf, (int)size, NULL, &lossy);
+    int len = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, path, -1, buf, (int)size, NULL, &lossy);
     if (len > 0 && !lossy) return true;
-    wchar_t shrt[MAX_PATH];
-    DWORD m = GetShortPathNameW(dir, shrt, MAX_PATH);
-    if (!m || m >= MAX_PATH) return false;
-    len = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, shrt, -1, buf, (int)size, NULL, &lossy);
+    wchar_t short_path[32768];
+    DWORD short_len = GetShortPathNameW(path, short_path, sizeof(short_path) / sizeof(*short_path));
+    if (!short_len || short_len >= sizeof(short_path) / sizeof(*short_path)) return false;
+    len = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, short_path, -1, buf, (int)size, NULL, &lossy);
     return len > 0 && !lossy;
+}
+
+static bool use_legacy_user_dir(const wchar_t *dir, char *buf, size_t size) {
+    if (!CreateDirectoryW(dir, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) return false;
+    DWORD attributes = GetFileAttributesW(dir);
+    if (attributes == INVALID_FILE_ATTRIBUTES || !(attributes & FILE_ATTRIBUTE_DIRECTORY)) return false;
+    return ansi_path(dir, buf, size);
+}
+
+// Save beside the game for portability. Existing AppData saves are copied once and kept as a backup.
+bool plat_user_dir(char *buf, size_t size) {
+    wchar_t local[32768], local_save[32768], legacy[32768], legacy_save[32768];
+    DWORD local_len = GetCurrentDirectoryW(sizeof(local) / sizeof(*local), local);
+    bool have_local = local_len && local_len < sizeof(local) / sizeof(*local) &&
+                      wide_join(local_save, sizeof(local_save) / sizeof(*local_save), local, L"save");
+    bool have_legacy = legacy_user_dir(legacy, sizeof(legacy) / sizeof(*legacy));
+    have_legacy = have_legacy && wide_join(legacy_save, sizeof(legacy_save) / sizeof(*legacy_save), legacy, L"save");
+
+    if (have_local && GetFileAttributesW(local_save) == INVALID_FILE_ATTRIBUTES) {
+        DWORD legacy_attributes = have_legacy ? GetFileAttributesW(legacy_save) : INVALID_FILE_ATTRIBUTES;
+        if (legacy_attributes != INVALID_FILE_ATTRIBUTES && (legacy_attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            wchar_t temporary[32768];
+            bool copied = false;
+            for (unsigned attempt = 0; attempt < 8; attempt++) {
+                int n = _snwprintf(temporary, sizeof(temporary) / sizeof(*temporary), L"%ls.migration-%lu-%u",
+                                   local_save, GetCurrentProcessId(), attempt);
+                if (n < 0 || (size_t)n >= sizeof(temporary) / sizeof(*temporary)) break;
+                if (GetFileAttributesW(temporary) != INVALID_FILE_ATTRIBUTES) continue;
+                if (!copy_save_tree(legacy_save, temporary)) {
+                    remove_save_tree(temporary);
+                    break;
+                }
+                if (MoveFileExW(temporary, local_save, MOVEFILE_WRITE_THROUGH)) {
+                    copied = true;
+                    break;
+                }
+                remove_save_tree(temporary);
+                break;
+            }
+            if (!copied) {
+                fprintf(stderr, "[save] could not copy existing saves beside the game; continuing to use AppData\n");
+                return use_legacy_user_dir(legacy, buf, size);
+            }
+            fprintf(stderr, "[save] copied existing saves beside the game; the AppData backup was left untouched\n");
+        }
+        if (!CreateDirectoryW(local_save, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) {
+            fprintf(stderr, "[save] could not create a portable save folder; continuing to use AppData\n");
+            return have_legacy && use_legacy_user_dir(legacy, buf, size);
+        }
+    } else if (have_local) {
+        DWORD attributes = GetFileAttributesW(local_save);
+        if (!(attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            fprintf(stderr, "[save] portable save path is not a folder; continuing to use AppData\n");
+            return have_legacy && use_legacy_user_dir(legacy, buf, size);
+        }
+    }
+
+    if (!have_local) return have_legacy && use_legacy_user_dir(legacy, buf, size);
+    if (strlen(".") + 1 > size) return false;
+    strcpy(buf, ".");
+    return true;
 }
 
 void plat_error_box(const char *msg) { MessageBoxA(NULL, msg, "MHGU Recomp", MB_OK | MB_ICONERROR); }

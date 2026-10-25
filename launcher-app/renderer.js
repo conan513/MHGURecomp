@@ -1,0 +1,502 @@
+import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+
+const currentWindow = getCurrentWindow();
+const launcher = Object.freeze({
+  getAppState: () => invoke('get_app_state'),
+  loadSettings: () => invoke('get_settings'),
+  getDefaults: () => invoke('get_defaults'),
+  saveSettings: (settings) => invoke('save_launcher_settings', { settings }),
+  launchGame: () => invoke('launch_game'),
+  openIni: () => invoke('open_ini'),
+  windowAction: (action) => action === 'minimize' ? currentWindow.minimize() : currentWindow.close(),
+});
+
+const categories = [
+  { id: 'display', title: 'Display', icon: '◈' },
+  { id: 'graphics', title: 'Graphics', icon: '◇' },
+  { id: 'controls', title: 'Controls', icon: '⌘' },
+  { id: 'multiplayer', title: 'Multiplayer', icon: '◎' },
+  { id: 'gameplay', title: 'Gameplay', icon: '⚔' },
+];
+
+const keyboardBindings = [
+  ['keyDpadUp', 'D-pad up'], ['keyDpadUpAlt', 'D-pad up (alternate)'],
+  ['keyDpadRight', 'D-pad right'], ['keyDpadRightAlt', 'D-pad right (alternate)'],
+  ['keyDpadDown', 'D-pad down'], ['keyDpadDownAlt', 'D-pad down (alternate)'],
+  ['keyDpadLeft', 'D-pad left'], ['keyDpadLeftAlt', 'D-pad left (alternate)'],
+  ['keyButtonA', 'A button'], ['keyButtonAAlt', 'A button (confirm)'],
+  ['keyButtonB', 'B button'], ['keyButtonBAlt', 'B button (back)'], ['keyButtonY', 'Y button'],
+  ['keyButtonL', 'L button'], ['keyButtonR', 'R button'], ['keyButtonZl', 'ZL button'],
+  ['keyButtonZr', 'ZR button'], ['keyButtonPlus', 'Plus button'],
+  ['keyButtonPlusAlt', 'Plus button (alternate)'], ['keyButtonPlusAlt2', 'Plus button (optional)'],
+  ['keyButtonMinus', 'Minus button'], ['keyButtonMinusAlt', 'Minus button (alternate)'],
+  ['keyButtonLeftStick', 'Left stick click'], ['keyButtonRightStick', 'Right stick click'],
+  ['keyStickUp', 'Move up'], ['keyStickLeft', 'Move left'], ['keyStickDown', 'Move down'],
+  ['keyStickRight', 'Move right'],
+];
+
+const mouseBindings = [
+  ['mouseLeftButton', 'Mouse left button'], ['mouseMiddleButton', 'Mouse middle button'],
+  ['mouseRightButton', 'Mouse right button'], ['mouseX1Button', 'Mouse side button X1'],
+  ['mouseX2Button', 'Mouse side button X2'],
+];
+
+const controlIslands = [
+  { title: 'Controller', fields: ['faceButtons'] },
+  { title: 'Mouse', fields: ['mouseSensitivity', ...mouseBindings.map(([id]) => id)] },
+  {
+    title: 'Keyboard',
+    groups: [
+      {
+        title: 'D-pad',
+        fields: keyboardBindings.slice(0, 8).map(([id]) => id),
+      },
+      {
+        title: 'Buttons',
+        fields: keyboardBindings.slice(8, 24).map(([id]) => id),
+      },
+      {
+        title: 'Movement',
+        fields: keyboardBindings.slice(24).map(([id]) => id),
+      },
+    ],
+  },
+];
+
+const categoryFields = {
+  display: ['mode', 'resolution', 'renderResolution'],
+  graphics: ['msaa', 'fxaa', 'fps', 'vsync'],
+  controls: [],
+  multiplayer: ['port', 'join', 'syncSmallMonsters'],
+  gameplay: ['villageQuestsInHub', 'hubHp', 'bonusContent', 'hp1', 'hp2', 'hp3', 'hp4', 'quests'],
+};
+
+const fieldInfo = {
+  mode: { label: 'Display mode', kind: 'select', options: ['Borderless', 'Fullscreen', 'Windowed'], help: 'Choose how the game occupies your display.' },
+  resolution: { label: 'Display resolution', kind: 'resolution', help: 'Use Desktop or enter a width x height, such as 1920x1080.' },
+  renderResolution: { label: '3D render resolution', kind: 'renderResolution', help: 'Auto picks the largest 16:9 resolution that fits your display.' },
+  msaa: { label: 'MSAA', kind: 'select', options: ['Off', '2x', '4x', '8x'], help: 'Multisample anti-aliasing.' },
+  fxaa: { label: 'FXAA', kind: 'toggle', help: 'A lightweight post-processing anti-aliasing pass.' },
+  fps: { label: 'Frame rate limit', kind: 'number', min: 30, max: 240, suffix: 'FPS' },
+  vsync: { label: 'VSync', kind: 'toggle', help: 'Synchronize frames with your display refresh.' },
+  faceButtons: {
+    label: 'Face button mapping',
+    kind: 'select',
+    options: [
+      { label: 'Switch layout (by position)', value: 'Position' },
+      { label: 'Match printed labels', value: 'Label' },
+    ],
+    help: 'Switch layout: the bottom button acts as B and the right button as A, whatever is printed on them. Match printed labels: an Xbox A button acts as A.',
+  },
+  mouseSensitivity: { label: 'Mouse sensitivity', kind: 'number', min: 0.1, max: 10, step: 0.1 },
+  mouseButton: {
+    kind: 'select',
+    options: [
+      'None', 'A', 'B', 'X', 'Y', 'L Stick', 'R Stick', 'L', 'R', 'ZL', 'ZR', 'Plus', 'Minus',
+      'D-pad Left', 'D-pad Up', 'D-pad Right', 'D-pad Down',
+    ],
+    help: 'Choose the Switch button this mouse button activates. The click that captures the mouse is not sent to the game.',
+  },
+  port: { label: 'Multiplayer port', kind: 'number', min: 1, max: 65535 },
+  join: { label: 'Remote hosts', kind: 'text', help: 'Comma-separated addresses of players to join.' },
+  syncSmallMonsters: { label: 'Synchronize small monsters', kind: 'toggle', help: 'Keep small monster state synchronized in multiplayer.' },
+  villageQuestsInHub: { label: 'Village quests at the Hub', kind: 'toggle' },
+  hubHp: { label: 'Village quest HP multiplier', kind: 'number', min: 0.05, max: 20 },
+  bonusContent: { label: 'Copy bonus content', kind: 'toggle', help: 'Copy bonus content from a donor save.' },
+  hp1: { label: '1 hunter', kind: 'number', min: 0.05, max: 20 },
+  hp2: { label: '2 hunters', kind: 'number', min: 0.05, max: 20 },
+  hp3: { label: '3 hunters', kind: 'number', min: 0.05, max: 20 },
+  hp4: { label: '4 hunters', kind: 'number', min: 0.05, max: 20 },
+  quests: { label: 'Per-quest HP multipliers', kind: 'quests', help: 'One multiplier or four comma-separated player-count values per quest. Example: Quest123 = 1.0, 1.2, 1.5, 2.0' },
+};
+for (const [id, label] of keyboardBindings) {
+  fieldInfo[id] = {
+    label,
+    kind: 'key',
+    help: id === 'keyButtonPlusAlt2'
+      ? 'Optional. Press Delete while assigning to leave this binding empty.'
+      : 'Click, then press a key to assign it.',
+  };
+}
+for (const [id, label] of mouseBindings) {
+  fieldInfo[id] = { ...fieldInfo.mouseButton, label };
+}
+
+const elements = Object.fromEntries([
+  'home-screen', 'settings-screen', 'settings-nav', 'category-title',
+  'field-grid', 'settings-form', 'form-error', 'unsaved-indicator', 'toast', 'build-status',
+  'build-status-text', 'reset-button', 'save-button', 'save-play-button',
+].map((id) => [id, document.getElementById(id)]));
+
+let settings = null;
+let activeCategory = 'display';
+let isDirty = false;
+let toastTimer = null;
+let listeningForBinding = null;
+
+function makeElement(tag, className, text) {
+  const element = document.createElement(tag);
+  if (className) element.className = className;
+  if (text !== undefined) element.textContent = text;
+  return element;
+}
+
+function showToast(message, isError = false) {
+  clearTimeout(toastTimer);
+  elements.toast.textContent = message;
+  elements.toast.classList.toggle('error', isError);
+  elements.toast.classList.add('visible');
+  toastTimer = setTimeout(() => elements.toast.classList.remove('visible'), 3400);
+}
+
+function confirmAction(title, message, actionLabel) {
+  return new Promise((resolve) => {
+    const dialog = document.getElementById('confirm-dialog');
+    const accept = document.getElementById('confirm-accept');
+    const cancel = document.getElementById('confirm-cancel');
+    document.getElementById('confirm-title').textContent = title;
+    document.getElementById('confirm-copy').textContent = message;
+    accept.textContent = actionLabel;
+    dialog.hidden = false;
+    accept.focus();
+
+    const finish = (accepted) => {
+      dialog.hidden = true;
+      accept.removeEventListener('click', onAccept);
+      cancel.removeEventListener('click', onCancel);
+      resolve(accepted);
+    };
+    const onAccept = () => finish(true);
+    const onCancel = () => finish(false);
+    accept.addEventListener('click', onAccept);
+    cancel.addEventListener('click', onCancel);
+  });
+}
+
+function setDirty(value) {
+  isDirty = value;
+  elements['unsaved-indicator'].hidden = !value;
+}
+
+function createNav() {
+  for (const category of categories) {
+    const button = makeElement('button', 'nav-item');
+    button.type = 'button';
+    button.dataset.category = category.id;
+    button.append(
+      makeElement('span', 'nav-icon', category.icon),
+      makeElement('span', '', category.title),
+    );
+    button.addEventListener('click', () => {
+      readVisibleFields();
+      renderCategory(category.id);
+    });
+    elements['settings-nav'].append(button);
+  }
+}
+
+function createField(id) {
+  const info = fieldInfo[id];
+  const label = makeElement('label', `field-card${id === 'quests' ? ' wide' : ''}`);
+  label.htmlFor = `setting-${id}`;
+  label.append(makeElement('span', 'field-label', info.label));
+  let control;
+  if (info.kind === 'key') {
+    control = makeElement('button', 'field-control key-binding', 'Press to assign');
+    control.type = 'button';
+    control.addEventListener('click', () => {
+      if (listeningForBinding === control) {
+        listeningForBinding = null;
+        writeVisibleFields();
+      } else {
+        listeningForBinding = control;
+        control.textContent = 'Press a key…';
+      }
+    });
+  } else if (info.kind === 'select' || info.kind === 'toggle') {
+    control = makeElement('select', 'field-control');
+    const choices = info.kind === 'toggle' ? ['On', 'Off'] : info.options;
+    for (const choice of choices) {
+      if (typeof choice === 'string') {
+        control.add(new Option(choice, choice));
+      } else {
+        control.add(new Option(choice.label, choice.value));
+      }
+    }
+  } else if (info.kind === 'quests') {
+    control = makeElement('textarea', 'field-control');
+    control.spellcheck = false;
+    control.placeholder = 'Quest123 = 1.0\nQuest456 = 1, 1.2, 1.5, 2';
+  } else {
+    control = makeElement('input', 'field-control');
+    control.type = info.kind === 'number' ? 'number' : 'text';
+    if (info.kind === 'number') {
+      control.min = String(info.min);
+      control.max = String(info.max);
+      control.step = String(info.step ?? 1);
+      control.inputMode = 'decimal';
+    }
+    if (id === 'resolution' || id === 'renderResolution') {
+      control.setAttribute('list', `${id}-presets`);
+      const list = makeElement('datalist');
+      list.id = `${id}-presets`;
+      const presets = id === 'resolution'
+        ? ['Desktop', '1280x720', '1600x900', '1920x1080', '2560x1440', '3840x2160']
+        : ['Auto', '1280x720', '1920x1080', '2560x1440', '3840x2160'];
+      for (const preset of presets) {
+        const option = makeElement('option');
+        option.value = preset;
+        list.append(option);
+      }
+      label.append(list);
+    }
+  }
+  control.id = `setting-${id}`;
+  control.dataset.setting = id;
+  control.addEventListener('input', () => setDirty(true));
+  control.addEventListener('change', () => setDirty(true));
+  label.append(control);
+  if (info.suffix || info.min !== undefined) {
+    const range = info.suffix
+      ? `${info.min}–${info.max} ${info.suffix}`
+      : `${info.min}–${info.max}`;
+    label.append(makeElement('span', 'field-help', info.help ?? range));
+  } else if (info.help) {
+    label.append(makeElement('span', 'field-help', info.help));
+  }
+  return label;
+}
+
+function createControlIsland(title, fieldIds, groups = null) {
+  const island = makeElement('section', 'control-island');
+  island.append(makeElement('h3', 'control-island-title', title));
+  if (groups) {
+    for (const group of groups) {
+      const subsection = makeElement('div', 'control-subsection');
+      subsection.append(makeElement('h4', 'control-subsection-title', group.title));
+      const grid = makeElement('div', 'control-island-grid');
+      for (const id of group.fields) grid.append(createField(id));
+      subsection.append(grid);
+      island.append(subsection);
+    }
+  } else {
+    const grid = makeElement('div', 'control-island-grid');
+    for (const id of fieldIds) grid.append(createField(id));
+    island.append(grid);
+  }
+  return island;
+}
+
+function renderCategory(categoryId) {
+  listeningForBinding = null;
+  activeCategory = categoryId;
+  const category = categories.find((item) => item.id === categoryId);
+  elements['category-title'].textContent = category.title;
+  for (const item of elements['settings-nav'].querySelectorAll('.nav-item')) {
+    const active = item.dataset.category === categoryId;
+    item.classList.toggle('active', active);
+    item.setAttribute('aria-current', active ? 'page' : 'false');
+  }
+  const fieldIds = categoryFields[categoryId];
+  elements['field-grid'].replaceChildren();
+  if (categoryId === 'gameplay') {
+    for (const id of fieldIds.slice(0, 3)) elements['field-grid'].append(createField(id));
+    const hpGroup = makeElement('div', 'hp-grid wide');
+    for (const id of fieldIds.slice(3, 7)) hpGroup.append(createField(id));
+    elements['field-grid'].append(hpGroup, createField('quests'));
+  } else if (categoryId === 'controls') {
+    for (const island of controlIslands) {
+      elements['field-grid'].append(createControlIsland(island.title, island.fields, island.groups));
+    }
+  } else {
+    for (const id of fieldIds) elements['field-grid'].append(createField(id));
+  }
+  writeVisibleFields();
+}
+
+function writeVisibleFields() {
+  if (!settings) return;
+  for (const control of elements['field-grid'].querySelectorAll('[data-setting]')) {
+    const id = control.dataset.setting;
+    if (id === 'quests') {
+      control.value = settings.quests.map(({ id: questId, value }) => `Quest${questId} = ${value}`).join('\n');
+    } else if (control instanceof HTMLButtonElement) {
+      control.dataset.boundKey = settings[id] ?? '';
+      control.textContent = listeningForBinding === control ? 'Press a key…' : settings[id] ?? '';
+    } else {
+      control.value = settings[id] ?? '';
+    }
+  }
+}
+
+function readQuestLines(text) {
+  const quests = [];
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const match = /^\s*Quest(\d+)\s*=\s*(.*?)\s*$/i.exec(line);
+    if (match) quests.push({ id: Number(match[1]), value: match[2] });
+    else quests.push({ id: 0, value: line });
+  }
+  return quests;
+}
+
+function readVisibleFields() {
+  if (!settings) return;
+  for (const control of elements['field-grid'].querySelectorAll('[data-setting]')) {
+    const id = control.dataset.setting;
+    settings[id] = id === 'quests'
+      ? readQuestLines(control.value)
+      : control instanceof HTMLButtonElement ? control.dataset.boundKey : control.value;
+  }
+}
+
+function keyNameFromCode(code) {
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit[0-9]$/.test(code)) return code.slice(5);
+  if (/^F([1-9]|1[0-2])$/.test(code)) return code;
+  if (/^Numpad[0-9]$/.test(code)) return `Keypad ${code.slice(6)}`;
+  const names = {
+    ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right',
+    Escape: 'Escape', Enter: 'Return', NumpadEnter: 'Keypad Enter', Space: 'Space', Tab: 'Tab',
+    Backspace: 'Backspace', ShiftLeft: 'Left Shift', ShiftRight: 'Right Shift',
+    ControlLeft: 'Left Ctrl', ControlRight: 'Right Ctrl', AltLeft: 'Left Alt', AltRight: 'Right Alt',
+    CapsLock: 'CapsLock', Insert: 'Insert',     Delete: 'None', Home: 'Home', End: 'End',
+    PageUp: 'PageUp', PageDown: 'PageDown', Minus: '-', Equal: '=', BracketLeft: '[',
+    BracketRight: ']', Backslash: '\\', Semicolon: ';', Quote: "'", Backquote: '`',
+    Comma: ',', Period: '.', Slash: '/', NumpadAdd: 'Keypad +', NumpadSubtract: 'Keypad -',
+    NumpadMultiply: 'Keypad *', NumpadDivide: 'Keypad /', NumpadDecimal: 'Keypad .',
+  };
+  return names[code] ?? null;
+}
+
+document.addEventListener('keydown', (event) => {
+  if (!listeningForBinding) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  const name = keyNameFromCode(event.code);
+  if (!name) {
+    showToast('That key is not supported for bindings.', true);
+    return;
+  }
+  const control = listeningForBinding;
+  listeningForBinding = null;
+  control.dataset.boundKey = name;
+  control.textContent = name;
+  elements['form-error'].hidden = true;
+  setDirty(true);
+});
+
+function showSaveError(result) {
+  const messages = result.validation ? Object.values(result.validation) : [result.message];
+  elements['form-error'].textContent = messages.join(' ');
+  elements['form-error'].hidden = false;
+}
+
+async function saveCurrentSettings(launchAfterSave = false) {
+  readVisibleFields();
+  elements['form-error'].hidden = true;
+  try {
+    const result = await launcher.saveSettings(settings);
+    if (!result.ok) {
+      showSaveError(result);
+      return false;
+    }
+    setDirty(false);
+    showToast('Settings saved to mhgurecomp.ini.');
+    if (launchAfterSave) await launchGame();
+    return true;
+  } catch (error) {
+    showToast(error.message, true);
+    return false;
+  }
+}
+
+async function launchGame() {
+  try {
+    await launcher.launchGame();
+    await launcher.windowAction('close');
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function switchScreen(screen) {
+  listeningForBinding = null;
+  const showSettings = screen === 'settings';
+  elements['home-screen'].hidden = showSettings;
+  elements['settings-screen'].hidden = !showSettings;
+  if (showSettings) {
+    launcher.loadSettings().then((loaded) => {
+      settings = loaded;
+      renderCategory(activeCategory);
+      setDirty(false);
+    }).catch((error) => showToast(error.message, true));
+  }
+}
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+}
+
+function setupActions() {
+  document.getElementById('play-button').addEventListener('click', launchGame);
+  document.getElementById('settings-button').addEventListener('click', () => switchScreen('settings'));
+  document.getElementById('exit-button').addEventListener('click', () => launcher.windowAction('close'));
+  document.getElementById('back-button').addEventListener('click', async () => {
+    if (isDirty && !await confirmAction('Leave settings?', 'Your changes have not been saved.', 'LEAVE')) return;
+    switchScreen('home');
+  });
+  document.getElementById('open-ini-button').addEventListener('click', async () => {
+    try {
+      await launcher.openIni();
+    } catch (error) {
+      showToast(error.message, true);
+    }
+  });
+  document.getElementById('settings-form').addEventListener('submit', (event) => event.preventDefault());
+  elements['field-grid'].addEventListener('input', () => {
+    elements['form-error'].hidden = true;
+  });
+  elements['save-button'].addEventListener('click', () => saveCurrentSettings());
+  elements['save-play-button'].addEventListener('click', () => saveCurrentSettings(true));
+  elements['reset-button'].addEventListener('click', async () => {
+    if (!await confirmAction('Restore defaults?', 'All launcher settings will return to their default values.', 'RESTORE')) return;
+    launcher.getDefaults().then((defaults) => {
+      settings = defaults;
+      renderCategory(activeCategory);
+      setDirty(true);
+    }).catch((error) => showToast(error.message, true));
+  });
+  for (const button of document.querySelectorAll('[data-window-action]')) {
+    button.addEventListener('click', () => launcher.windowAction(button.dataset.windowAction));
+  }
+  document.querySelector('.titlebar').addEventListener('mousedown', (event) => {
+    if (event.button === 0 && !event.target.closest('.window-action')) currentWindow.startDragging();
+  });
+}
+
+async function initialize() {
+  createNav();
+  setupActions();
+  try {
+    const state = await launcher.getAppState();
+    const themePreference = window.matchMedia('(prefers-color-scheme: light)');
+    applyTheme(themePreference.matches ? 'light' : 'dark');
+    themePreference.addEventListener('change', (event) => applyTheme(event.matches ? 'light' : 'dark'));
+    document.documentElement.dataset.background = state.background;
+    const status = document.querySelector('.build-status');
+    if (!state.gameExists) {
+      status.classList.add('missing');
+      status.hidden = false;
+      elements['build-status-text'].textContent = 'GAME FILES NOT FOUND';
+      document.getElementById('play-button').title = 'mhgurecomp.exe must be next to the launcher.';
+    } else {
+      elements['build-status-text'].textContent = 'GAME FILES READY';
+    }
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+initialize();

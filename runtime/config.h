@@ -4,6 +4,38 @@
 
 enum { DISPLAY_WINDOWED, DISPLAY_FULLSCREEN, DISPLAY_BORDERLESS };
 enum { FACE_POSITION, FACE_LABEL };
+enum { MOUSE_LEFT, MOUSE_MIDDLE, MOUSE_RIGHT, MOUSE_X1, MOUSE_X2, MOUSE_BUTTON_COUNT };
+enum {
+    KEY_DPAD_UP,
+    KEY_DPAD_UP_ALT,
+    KEY_DPAD_RIGHT,
+    KEY_DPAD_RIGHT_ALT,
+    KEY_DPAD_DOWN,
+    KEY_DPAD_DOWN_ALT,
+    KEY_DPAD_LEFT,
+    KEY_DPAD_LEFT_ALT,
+    KEY_BUTTON_B,
+    KEY_BUTTON_B_ALT,
+    KEY_BUTTON_Y,
+    KEY_BUTTON_L,
+    KEY_BUTTON_R,
+    KEY_BUTTON_ZL,
+    KEY_BUTTON_ZR,
+    KEY_BUTTON_PLUS,
+    KEY_BUTTON_PLUS_ALT,
+    KEY_BUTTON_PLUS_ALT2,
+    KEY_BUTTON_MINUS,
+    KEY_BUTTON_MINUS_ALT,
+    KEY_BUTTON_LSTICK,
+    KEY_BUTTON_A,
+    KEY_BUTTON_A_ALT,
+    KEY_BUTTON_RSTICK,
+    KEY_STICK_UP,
+    KEY_STICK_LEFT,
+    KEY_STICK_DOWN,
+    KEY_STICK_RIGHT,
+    KEY_BINDING_COUNT,
+};
 
 // [Monster HP]: factors on the HP multiplier of Hub-type quests' large monsters
 #define HP_QUESTS_MAX 256
@@ -32,6 +64,8 @@ typedef struct {
     int village_in_hub;       // L / R at the Hub's / Pub's quest counter switch to Village quests (runtime/hle/villagehub.c)
     HpScale hp;               // large monster HP in Hub-type quests (runtime/hle/hpscale.c)
     float mouse_sensitivity;  // mouse look: the speed for full right stick tilt is divided by it (runtime/host_input.c)
+    int mouse_buttons[MOUSE_BUTTON_COUNT]; // Switch button index, or -1 when unbound (runtime/host_input.c)
+    int keyboard[KEY_BINDING_COUNT]; // SDL scancodes for the keyboard bindings (runtime/host_input.c)
 } Config;
 
 extern Config g_config;

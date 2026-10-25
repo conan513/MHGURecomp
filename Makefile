@@ -2,8 +2,7 @@
 # Windows: MSYS2 UCRT64 (clang, lld, make; see README.md). Linux: clang (planned).
 #
 #   make gen GAME=<folder with exefs/ and romfs/>   recompile the game code from your own dump into generated/
-#   make -j4                                        build build/mhgurecomp(.exe) and the game code library, with its
-#                                                   DLLs and the game files (build/data): start build/mhgurecomp.exe
+#   make -j4                                        build the runtime and package it in F:/mhgu-build-tools/build on Windows
 # build/ holds only the game folder (what a player copies); the compiler's files go to obj/.
 UNAME := $(shell uname -s)
 ifneq ($(filter MINGW% MSYS% CYGWIN% Windows_NT,$(UNAME) $(OS)),)
@@ -35,6 +34,9 @@ RT_HDRS  := $(wildcard runtime/*.h) $(wildcard runtime/platform/*.h) $(wildcard 
 ifeq ($(PLATFORM),windows)
 EXE      := $(B)/mhgurecomp.exe
 LAUNCHER := $(B)/MHGU-Launcher.exe
+NPM      ?= npm
+CARGO    ?= cargo
+PACKAGE_DIR ?= /f/mhgu-build-tools/build
 OSFLAGS  := -D_FILE_OFFSET_BITS=64 -DWIN32_LEAN_AND_MEAN -DNOMINMAX -D_CRT_RAND_S -D_POSIX_THREAD_SAFE_FUNCTIONS
 GENFLAGS += -D_FILE_OFFSET_BITS=64
 LDFLAGS  := -fuse-ld=lld -Wl,--stack,16777216 -lSDL3 -lavformat -lavcodec -lavutil -lvulkan-1 -lshaderc_shared -lwinmm -lole32 -lshell32 -luuid -lws2_32 \
@@ -74,7 +76,7 @@ else
 RT_CXX   := $(O)/rt/nvn/vulkan/vma.o
 endif
 
-all: $(EXE) $(LAUNCHER) $(if $(GEN_SRC),$(GAMELIB)) $(if $(filter windows,$(PLATFORM)),bundle) data
+all: $(EXE) $(LAUNCHER) $(if $(GEN_SRC),$(GAMELIB)) $(if $(filter windows,$(PLATFORM)),package) data
 
 $(O)/gen/%.o: $(GEN)/%.c runtime/cpu.h runtime/vfp.h runtime/neon_rt.h
 	@mkdir -p $(dir $@)
@@ -115,9 +117,20 @@ $(EXE): $(RT_OBJ)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 ifneq ($(LAUNCHER),)
-$(LAUNCHER): launcher.cpp
+LAUNCHER_APP_FILES := $(wildcard launcher-app/* launcher-app/test/* backgrounds/*)
+TAURI_FILES := $(wildcard src-tauri/*.toml src-tauri/*.json src-tauri/src/*.rs src-tauri/capabilities/*.json)
+TAURI_RELEASE_DIR := src-tauri/target/release
+
+node_modules/.package-lock.json: package.json package-lock.json
+	$(NPM) ci
+
+$(LAUNCHER): package.json package-lock.json $(LAUNCHER_APP_FILES) $(TAURI_FILES) src-tauri/Cargo.lock node_modules/.package-lock.json
 	@mkdir -p $(dir $@)
-	$(CXX) -O2 -fuse-ld=lld -mwindows -o $@ $< -lcomctl32 -lshell32
+	$(NPM) run build:launcher
+	$(CARGO) build --manifest-path src-tauri/Cargo.toml --release
+	cp $(TAURI_RELEASE_DIR)/mhgu-launcher.exe $@
+$(B)/WebView2Loader.dll: $(LAUNCHER)
+	cp $(TAURI_RELEASE_DIR)/WebView2Loader.dll $@
 endif
 
 $(GAMELIB): $(GEN_OBJ) | $(EXE)
@@ -133,8 +146,16 @@ PY := $(firstword $(wildcard tools/venv/Scripts/python.exe) $(wildcard tools/ven
 #   allows them - no second copy on disk, and deleting them leaves $(GAME) alone - else copies).
 # Nothing else: a player copies it as a whole into their game folder (or over it: their settings, caches, mods/ and
 # log.txt are written only when the game runs). run-game.bat runs it with those in run/ (MHGU_HOME), not here.
-bundle: $(EXE) $(LAUNCHER) $(if $(GEN_SRC),$(GAMELIB))
+bundle: $(EXE) $(LAUNCHER) $(if $(LAUNCHER),$(B)/WebView2Loader.dll) $(if $(GEN_SRC),$(GAMELIB))
 	@$(PY) tools/bundle_dlls.py "$$(cygpath -m "$$(dirname "$$(command -v $(CC))")")" $(B) $^
+
+ifneq ($(LAUNCHER),)
+package: bundle data
+	@mkdir -p "$(PACKAGE_DIR)"
+	@cp -a "$(B)/." "$(PACKAGE_DIR)/"
+	@mkdir -p "$(PACKAGE_DIR)/data"
+	@cp README.md LICENSE THIRD_PARTY_NOTICES "$(PACKAGE_DIR)/"
+endif
 
 data: $(B)/data/.complete
 $(B)/data/.complete:
@@ -163,4 +184,4 @@ runtime-objs: $(RT_OBJ)
 clean:  # (keeps $(B)/data, and the settings, caches and saves wherever the game ran)
 	rm -rf $(O) $(B)/*.dll $(B)/*.so $(EXE) $(LAUNCHER) $(B)/vkprobe.exe
 
-.PHONY: all gen test-lift runtime-objs clean bundle data FORCE
+.PHONY: all gen test-lift runtime-objs clean bundle package data FORCE

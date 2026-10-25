@@ -29,8 +29,17 @@ bool gamelib_load(char *why, size_t why_size) {
         snprintf(path, sizeof path, "%s%s", exe, GAMELIB_NAME);
     }
 #ifdef _WIN32
-    HMODULE h = LoadLibraryA(path);
-    if (!h) { snprintf(why, why_size, "can't load %s (error %lu): run `make gen` and `make` first", path, GetLastError()); return false; }
+    int wide_size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, NULL, 0);
+    wchar_t *wide_path = wide_size ? malloc((size_t)wide_size * sizeof(*wide_path)) : NULL;
+    if (!wide_path || !MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, wide_path, wide_size)) {
+        free(wide_path);
+        snprintf(why, why_size, "invalid UTF-8 game library path: %s", path);
+        return false;
+    }
+    HMODULE h = LoadLibraryW(wide_path);
+    DWORD load_error = h ? ERROR_SUCCESS : GetLastError();
+    free(wide_path);
+    if (!h) { snprintf(why, why_size, "can't load %s (error %lu): run `make gen` and `make` first", path, load_error); return false; }
     GameLibEntry entry = (GameLibEntry)(void *)GetProcAddress(h, GAMELIB_ENTRY);
 #else
     void *h = dlopen(path, RTLD_NOW | RTLD_LOCAL);

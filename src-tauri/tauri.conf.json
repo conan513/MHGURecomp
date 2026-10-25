@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "MHGU-Launcher",
+  "version": "1.0.0",
+  "identifier": "com.mhgu.recomp.launcher",
+  "build": {
+    "beforeDevCommand": "npm run dev -- --host 127.0.0.1",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run build:ui",
+    "frontendDist": "../dist/launcher-ui"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Monster Hunter Generations Ultimate Recomp",
+        "width": 1180,
+        "height": 800,
+        "minWidth": 960,
+        "minHeight": 680,
+        "center": true,
+        "decorations": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": false,
+    "icon": [
+      "icons/icon.ico"
+    ]
+  }
+}

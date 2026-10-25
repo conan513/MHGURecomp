@@ -14,6 +14,27 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install launcher dependencies
+        run: npm ci
+
+      - name: Test launcher settings
+        run: npm test
+
+      - name: Prepare launcher assets
+        run: npm run build:launcher
+
+      - name: Test launcher backend
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
         with:

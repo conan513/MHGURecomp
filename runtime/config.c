@@ -12,9 +12,36 @@
 #include <SDL3/SDL.h>
 
 #include "config.h"
+#include "hle/input.h"
 #include "rt.h"
 
-Config g_config = {DISPLAY_BORDERLESS, 1920, 1080, 0, 0, 60, 1, 1, 1, FACE_POSITION, 39500, "", 1, 1, 1, {{1, 1, 1, 1}, 2}, 1.0f};
+Config g_config = {
+    .display_mode = DISPLAY_BORDERLESS,
+    .width = 1920,
+    .height = 1080,
+    .fps = 60,
+    .vsync = 1,
+    .msaa = 1,
+    .fxaa = 1,
+    .face_buttons = FACE_POSITION,
+    .ldn_port = 39500,
+    .sync_small_monsters = 1,
+    .bonus_content = 1,
+    .village_in_hub = 1,
+    .hp = {{1, 1, 1, 1}, 2},
+    .mouse_sensitivity = 1.0f,
+    .mouse_buttons = {BTN_X, -1, BTN_A, -1, -1},
+    .keyboard = {
+        SDL_SCANCODE_1, SDL_SCANCODE_UP, SDL_SCANCODE_2, SDL_SCANCODE_RIGHT,
+        SDL_SCANCODE_3, SDL_SCANCODE_DOWN, SDL_SCANCODE_4, SDL_SCANCODE_LEFT,
+        SDL_SCANCODE_SPACE, SDL_SCANCODE_BACKSPACE, SDL_SCANCODE_E, SDL_SCANCODE_Q,
+        SDL_SCANCODE_LSHIFT, SDL_SCANCODE_TAB, SDL_SCANCODE_R, SDL_SCANCODE_KP_ENTER,
+        SDL_SCANCODE_ESCAPE, SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_C, SDL_SCANCODE_V,
+        SDL_SCANCODE_LCTRL, SDL_SCANCODE_F, SDL_SCANCODE_RETURN, SDL_SCANCODE_LALT,
+        SDL_SCANCODE_W, SDL_SCANCODE_A,
+        SDL_SCANCODE_S, SDL_SCANCODE_D,
+    },
+};
 uint32_t g_render_size[2] = {1920, 1080};
 
 static const char DEFAULT_INI[] =
@@ -53,17 +80,56 @@ static const char DEFAULT_INI[] =
     "VSync = On\n"
     "\n"
     "[Controls]\n"
-    "; Controller face buttons: Position or Label.\n"
+    "; Controller face buttons: Position uses the Switch layout; Label follows the letters printed on the buttons.\n"
     "; Position: the Switch layout the game is made for - the right button is A (confirm), the bottom one B, the left\n"
     ";   one Y, the top one X, whatever is printed on them (on an Xbox controller the in-game icons then don't match).\n"
     "; Label: by the letter printed on the button (an Xbox controller's A is A; the icons match, the layout is awkward).\n"
     "FaceButtons = Position\n"
     "\n"
+    "[Keyboard]\n"
+    "; Keyboard keys for Switch buttons and stick directions. The launcher can capture a key when you click a binding.\n"
+    "; D-pad defaults keep both the number keys and arrow keys. Delete clears a launcher binding; None disables it.\n"
+    "; Enter confirms (A), Backspace goes back (B). Key names use SDL names (e.g. Left Shift, Keypad Enter).\n"
+    "DpadUp = 1\n"
+    "DpadUpAlt = Up\n"
+    "DpadRight = 2\n"
+    "DpadRightAlt = Right\n"
+    "DpadDown = 3\n"
+    "DpadDownAlt = Down\n"
+    "DpadLeft = 4\n"
+    "DpadLeftAlt = Left\n"
+    "ButtonB = Space\n"
+    "ButtonBAlt = Backspace\n"
+    "ButtonY = E\n"
+    "ButtonL = Q\n"
+    "ButtonR = Left Shift\n"
+    "ButtonZL = Tab\n"
+    "ButtonZR = R\n"
+    "ButtonPlus = Keypad Enter\n"
+    "ButtonPlusAlt = Escape\n"
+    "ButtonPlusAlt2 = None\n"
+    "ButtonMinus = C\n"
+    "ButtonMinusAlt = V\n"
+    "ButtonLeftStick = Left Ctrl\n"
+    "ButtonA = F\n"
+    "ButtonAAlt = Return\n"
+    "ButtonRightStick = Left Alt\n"
+    "StickUp = W\n"
+    "StickLeft = A\n"
+    "StickDown = S\n"
+    "StickRight = D\n"
+    "\n"
     "[Mouse]\n"
     "; Mouse look: click in the game window to capture the mouse (it then turns the camera, as the right stick), Esc\n"
     "; lets it go. Sensitivity: 1 = full stick tilt at a brisk mouse movement; 0.5 slower, 2 faster (0.1 to 10). The\n"
-    "; game's own camera options (speed, inverted axes) apply on top.\n"
+    "; game's own camera options (speed, inverted axes) apply on top. Mouse buttons can be mapped to any Switch button\n"
+    "; or None. The first click used to capture the mouse is not sent to the game.\n"
     "MouseSensitivity = 1.0\n"
+    "LeftButton = X\n"
+    "MiddleButton = None\n"
+    "RightButton = A\n"
+    "X1Button = None\n"
+    "X2Button = None\n"
     "\n"
     "[Multiplayer]\n"
     "; Local Play (the Switch's wireless play with people nearby) over the network. Create a hub under Local Play to\n"
@@ -153,12 +219,72 @@ static int parse_factors(const char *v, float f[4]) {
 static int desktop_w, desktop_h;
 static bool render_auto = true;
 
+static const struct {
+    const char *key;
+    int binding;
+} keyboard_settings[] = {
+    {"dpadup", KEY_DPAD_UP}, {"dpadupalt", KEY_DPAD_UP_ALT},
+    {"dpadright", KEY_DPAD_RIGHT}, {"dpadrightalt", KEY_DPAD_RIGHT_ALT},
+    {"dpaddown", KEY_DPAD_DOWN}, {"dpaddownalt", KEY_DPAD_DOWN_ALT},
+    {"dpadleft", KEY_DPAD_LEFT}, {"dpadleftalt", KEY_DPAD_LEFT_ALT},
+    {"buttonb", KEY_BUTTON_B}, {"buttonbalt", KEY_BUTTON_B_ALT}, {"buttony", KEY_BUTTON_Y},
+    {"buttonl", KEY_BUTTON_L}, {"buttonr", KEY_BUTTON_R},
+    {"buttonzl", KEY_BUTTON_ZL}, {"buttonzr", KEY_BUTTON_ZR},
+    {"buttonplus", KEY_BUTTON_PLUS}, {"buttonplusalt", KEY_BUTTON_PLUS_ALT},
+    {"buttonplusalt2", KEY_BUTTON_PLUS_ALT2}, {"buttonminus", KEY_BUTTON_MINUS},
+    {"buttonminusalt", KEY_BUTTON_MINUS_ALT}, {"buttonleftstick", KEY_BUTTON_LSTICK},
+    {"buttona", KEY_BUTTON_A}, {"buttonaalt", KEY_BUTTON_A_ALT}, {"buttonrightstick", KEY_BUTTON_RSTICK},
+    {"stickup", KEY_STICK_UP}, {"stickleft", KEY_STICK_LEFT},
+    {"stickdown", KEY_STICK_DOWN}, {"stickright", KEY_STICK_RIGHT},
+};
+
+static const struct {
+    const char *key;
+    int binding;
+} mouse_settings[] = {
+    {"leftbutton", MOUSE_LEFT}, {"middlebutton", MOUSE_MIDDLE}, {"rightbutton", MOUSE_RIGHT},
+    {"x1button", MOUSE_X1}, {"x2button", MOUSE_X2},
+};
+
+static const struct {
+    const char *name;
+    int button;
+} mouse_button_names[] = {
+    {"a", BTN_A}, {"b", BTN_B}, {"x", BTN_X}, {"y", BTN_Y},
+    {"lstick", BTN_LSTICK}, {"rstick", BTN_RSTICK}, {"l", BTN_L}, {"r", BTN_R},
+    {"zl", BTN_ZL}, {"zr", BTN_ZR}, {"plus", BTN_PLUS}, {"minus", BTN_MINUS},
+    {"dpadleft", BTN_LEFT}, {"dpadup", BTN_UP}, {"dpadright", BTN_RIGHT}, {"dpaddown", BTN_DOWN},
+};
+
+static int parse_mouse_button(const char *name) {
+    if (!strcmp(name, "none")) return -1;
+    for (unsigned i = 0; i < sizeof mouse_button_names / sizeof *mouse_button_names; i++)
+        if (!strcmp(name, mouse_button_names[i].name)) return mouse_button_names[i].button;
+    return -2;
+}
+
 static void set_key(const char *key, char *val, int line) {
     char k[64], v[256];
     snprintf(k, sizeof k, "%s", key);
     snprintf(v, sizeof v, "%s", val);
     squash(k);
     squash(v);
+    for (unsigned i = 0; i < sizeof keyboard_settings / sizeof *keyboard_settings; i++) {
+        if (strcmp(k, keyboard_settings[i].key)) continue;
+        SDL_Scancode scancode = !strcmp(v, "none") ? SDL_SCANCODE_UNKNOWN : SDL_GetScancodeFromName(val);
+        if ((!strcmp(v, "none") || scancode != SDL_SCANCODE_UNKNOWN) && scancode < SDL_SCANCODE_COUNT)
+            g_config.keyboard[keyboard_settings[i].binding] = scancode;
+        else
+            LOG("[config] line %d: \"%s\" is not a recognized keyboard key; using the default\n", line, val);
+        return;
+    }
+    for (unsigned i = 0; i < sizeof mouse_settings / sizeof *mouse_settings; i++) {
+        if (strcmp(k, mouse_settings[i].key)) continue;
+        int button = parse_mouse_button(v);
+        if (button != -2) g_config.mouse_buttons[mouse_settings[i].binding] = button;
+        else LOG("[config] line %d: \"%s\" is not a recognized mouse button mapping; using the default\n", line, val);
+        return;
+    }
     bool ok = true;
     if (!strcmp(k, "mode")) {
         if (!strcmp(v, "fullscreen") || !strcmp(v, "exclusive") || !strcmp(v, "exclusivefullscreen"))
@@ -278,6 +404,20 @@ static void append_missing_sections(const char *path, const char *seen) {
     if (o) fclose(o);
 }
 
+static void migrate_default_keyboard_bindings(void) {
+    int *key = g_config.keyboard;
+    if (key[KEY_BUTTON_B] == SDL_SCANCODE_SPACE && key[KEY_BUTTON_A] == SDL_SCANCODE_F &&
+        key[KEY_BUTTON_B_ALT] == SDL_SCANCODE_RETURN && key[KEY_BUTTON_A_ALT] == SDL_SCANCODE_BACKSPACE &&
+        key[KEY_BUTTON_PLUS] == SDL_SCANCODE_RETURN && key[KEY_BUTTON_PLUS_ALT] == SDL_SCANCODE_KP_ENTER &&
+        key[KEY_BUTTON_PLUS_ALT2] == SDL_SCANCODE_ESCAPE) {
+        key[KEY_BUTTON_B_ALT] = SDL_SCANCODE_BACKSPACE;
+        key[KEY_BUTTON_A_ALT] = SDL_SCANCODE_RETURN;
+        key[KEY_BUTTON_PLUS] = SDL_SCANCODE_KP_ENTER;
+        key[KEY_BUTTON_PLUS_ALT] = SDL_SCANCODE_ESCAPE;
+        key[KEY_BUTTON_PLUS_ALT2] = SDL_SCANCODE_UNKNOWN;
+    }
+}
+
 void config_load(void) {
     char path[1100];
     ini_path(path, sizeof path);
@@ -310,6 +450,7 @@ void config_load(void) {
         fclose(f);
         append_missing_sections(path, seen);
     }
+    migrate_default_keyboard_bindings();
 
     const SDL_DisplayMode *dm = SDL_GetDesktopDisplayMode(SDL_GetPrimaryDisplay());
     desktop_w = dm ? dm->w : 1920, desktop_h = dm ? dm->h : 1080;

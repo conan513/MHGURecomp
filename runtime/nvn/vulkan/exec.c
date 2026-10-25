@@ -15,6 +15,9 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>  // ftruncate (mingw pulls it in through another header; POSIX does not)
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include "../../kernel.h"
 #include "shaders.h"
@@ -1666,6 +1669,29 @@ static Prog **progcache_slot(uint64_t ck, bool insert) {
     return NULL;
 }
 
+#ifdef _WIN32
+static bool executable_stamp(uint64_t *size, uint64_t *modified) {
+    wchar_t path[32768];
+    DWORD n = GetModuleFileNameW(NULL, path, sizeof(path) / sizeof(*path));
+    WIN32_FILE_ATTRIBUTE_DATA info;
+    if (!n || n >= sizeof(path) / sizeof(*path) ||
+        !GetFileAttributesExW(path, GetFileExInfoStandard, &info))
+        return false;
+    *size = ((uint64_t)info.nFileSizeHigh << 32) | info.nFileSizeLow;
+    *modified = ((uint64_t)info.ftLastWriteTime.dwHighDateTime << 32) | info.ftLastWriteTime.dwLowDateTime;
+    return true;
+}
+#else
+static bool executable_stamp(uint64_t *size, uint64_t *modified) {
+    char path[1024];
+    struct stat info;
+    if (!plat_exe_path(path, sizeof path) || stat(path, &info)) return false;
+    *size = (uint64_t)info.st_size;
+    *modified = (uint64_t)info.st_mtime;
+    return true;
+}
+#endif
+
 static void progcache_init(void) {
     static bool done;
     if (done) return;
@@ -1673,10 +1699,9 @@ static void progcache_init(void) {
     if (getenv("MHGU_NO_PROGRAM_CACHE") || getenv("MHGU_SAVE_GLSL") || getenv("MHGU_SAVE_MSL") || getenv("MHGU_NO_DISCARD"))
         return;
     CacheHeader hdr = {"MHGUPRG", sizeof(ProgRec)}, fh;
-    char exe[1024];
-    struct stat es;
-    if (!plat_exe_path(exe, sizeof exe) || stat(exe, &es)) return;
-    hdr.stamp = hash_words(hdr.stamp, (uint64_t[]){(uint64_t)es.st_size, (uint64_t)es.st_mtime}, 16);
+    uint64_t exe_size, exe_modified;
+    if (!executable_stamp(&exe_size, &exe_modified)) return;
+    hdr.stamp = hash_words(hdr.stamp, (uint64_t[]){exe_size, exe_modified}, 16);
     mkdir("cache", 0755);
     uint64_t t0 = plat_now_ns();
     int n = 0;

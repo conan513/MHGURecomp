@@ -32,6 +32,9 @@ Status: fully playable, but there may be some bugs. I've played a dozen hunts wi
 
 ## Installing a release
 
+The launcher requires the Microsoft Edge WebView2 Runtime. It is included with current Windows 11 installations;
+on other systems, install the [Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
+
 1. Extract the release zip anywhere, for example `C:\Games\MHGURecomp\`.
 2. Put the game's `exefs` and `romfs` folders in the `data` subfolder. It should look like this:
 
@@ -39,6 +42,7 @@ Status: fully playable, but there may be some bugs. I've played a dozen hunts wi
    MHGURecomp\
      mhgurecomp.exe
      MHGU-Launcher.exe
+     WebView2Loader.dll
      mhgugame.dll
      (other .dll files)
      data\
@@ -55,28 +59,33 @@ Status: fully playable, but there may be some bugs. I've played a dozen hunts wi
 
    `exefs` must come from the 1.4.0 update, and `romfs` must be the base game's romfs with the update's files
    merged over it.
-3. Start `MHGU-Launcher.exe` to edit the settings and launch the game, or start `mhgurecomp.exe` directly.
+3. Start `MHGU-Launcher.exe` for the launcher home screen and game settings, or start `mhgurecomp.exe` directly.
 
 If the files are missing or the wrong version, a message box says so.
+
+The package is portable: keep the files together when moving the folder. Settings, caches, mods, and saves stay
+beside the game; spaces and non-English characters in the folder path are supported. The only external requirement
+is the Windows WebView2 Runtime.
 
 ### Where things are
 
 | What | Where |
 | --- | --- |
 | Settings | `mhgurecomp.ini` next to the exe (written with the defaults on first game start; the launcher can edit it) |
-| Save data | `%APPDATA%\MHGURecomp\save\` (kept apart from the game folder so updating the port can't touch it) |
+| Save data | `save\` beside the exe (existing AppData saves are copied here on first launch; the original is kept as a backup) |
 | Log | `log.txt` next to the exe (look here first when something goes wrong) |
 | Screenshots | `shots\` next to the exe (F12) |
 | Mods | `mods\` next to the exe: one folder per mod (see below) |
 | Cheats | `cheats\` next to the exe: `.txt` files with cheat codes (see below) |
 | Shader cache | `cache\` next to the exe (safe to delete; the first minutes after that may stutter) |
 
-To move an existing Switch save over, put its `system` and `system_backup` files in
-`%APPDATA%\MHGURecomp\save\save_0\`.
+To move an existing Switch save over, put its `system` and `system_backup` files in `save\save_0\` beside the exe.
+On the first launch after this update, an existing `%APPDATA%\MHGURecomp\save\` is copied there automatically if
+the portable `save\` folder does not already exist. The AppData copy is left untouched as a backup.
 
 ## Controls
 
-Almost every controller under the sun should work, as long as it has SDL support. If you really want to swap the face buttons on non-Nintendo controllers, open the .ini file and set `FaceButtons = Label`.
+Almost every controller under the sun should work, as long as it has SDL support. `FaceButtons = Position` uses the Switch layout: the bottom button acts as B and the right button as A, whatever is printed on them. Set `FaceButtons = Label` to match the printed letters instead (for example, an Xbox A button acts as A).
 
 Keyboard and mouse support (not recommended):
 
@@ -84,39 +93,58 @@ Keyboard and mouse support (not recommended):
 | --- | --- |
 | W A S D | left stick (hold Left Shift to walk) |
 | Mouse | right stick (camera) |
-| Left click / Right click | X / A |
+| Mouse buttons | Configurable Switch buttons (default: left = X, right = A) |
 | Space / R | B / Y |
 | Q / E | L / R |
 | Tab / T | ZL / ZR |
-| Enter / Backspace | Plus / Minus |
-| Arrow keys | d-pad |
+| Enter / Backspace | A (confirm) / B (back) |
+| Keypad Enter / Escape | Plus / Plus (alternate) |
+| 1 / 2 / 3 / 4 and arrow keys | d-pad up / right / down / left |
 | Ctrl / Alt | left / right stick click |
 
 Click in the game window to capture the mouse for the camera; Escape lets it go (so does switching to another
 window). `MouseSensitivity` in the ini's `[Mouse]` section sets its speed; the game's own camera options (speed,
 inverted axes) apply to it too.
 
-When the game asks for text (names, chat), the keyboard types: Enter confirms, Escape cancels, Ctrl+V pastes.
+Keyboard bindings can be changed in the launcher's **Controls** settings by clicking a key field and pressing a
+replacement key. The same bindings are stored in the ini's `[Keyboard]` section (for example, `DpadUp = 1` and
+`DpadUpAlt = Up`); the alternate D-pad keys let both the number row and arrow keys work at once. Key names use SDL's
+usual names, such as `Left Shift` or `Keypad Enter`.
+
+Mouse button assignments can also be changed in **Controls**. The left, middle, right and two side buttons can each
+activate any Switch button or be set to `None`; the first click that captures the mouse is not sent to the game.
+These assignments are stored in `[Mouse]` as `LeftButton`, `MiddleButton`, `RightButton`, `X1Button` and `X2Button`.
+
+When the game asks for text (names, chat), Enter confirms, Escape cancels, and Ctrl+V pastes.
 
 Other keys: Alt+Enter switches between windowed and full screen, F12 takes a screenshot, F7 cycles MSAA.
 
 ## Settings
 
 Everything is in `mhgurecomp.ini`; each setting is explained in the file itself. On Windows, the
-`MHGU-Launcher.exe` companion can edit all settings, including per-quest HP multipliers, save them, and start the
-game. The ini file can still be edited manually. In short:
+`MHGU-Launcher.exe` companion has a home screen for starting the game and a separate settings view for all options,
+including per-quest HP multipliers. It follows the Windows light/dark preference and saves the ini while preserving
+settings it does not manage. The ini file can still be edited manually. In short:
 
 - `[Display]`: `Mode` (Borderless / Fullscreen / Windowed), `Resolution`, `RenderResolution` (the 3D resolution)
 - `[Anti-aliasing]`: `MSAA` (Off / 2x / 4x / 8x), `FXAA` (On / Off)
 - `[Performance]`: `FPS` (30 to 240), `VSync` (On / Off; above your monitor's refresh rate, turn VSync off)
 - `[Controls]`: `FaceButtons` (Position / Label)
-- `[Mouse]`: `MouseSensitivity` (1 = default, 0.1 to 10)
+- `[Keyboard]`: configurable keys for the keyboard's Switch buttons and stick directions
+- `[Mouse]`: `MouseSensitivity` (1 = default, 0.1 to 10) and configurable mouse button assignments
 - `[Multiplayer]`: `Port`, `Join` (addresses of hosts outside your LAN), `SyncSmallMonsters`
 - `[Monster HP]`: HP factors for 1 to 4 hunters in Hub quests, and per-quest exceptions (default: all 1, the
   original game)
 - `[Village Quests]`: `VillageQuestsInHub` (default On), `HubHP` (default 2.0: Village quests posted in the Hub
   multiply their monsters' HP by this first, then by the `[Monster HP]` factor)
 - `[Bonus Content]`: `BonusContent` (default On), see below
+
+### Building on Windows
+
+With the MSYS2 UCRT64 build dependencies installed, run `make -j2` from the repository. On Windows, a successful
+build also copies the complete runtime package (the executables, required DLLs, and any built game/data files) to
+`F:\mhgu-build-tools\build`. Override the destination with `make PACKAGE_DIR=/f/another/path -j2` if needed. The package
+does not include game files unless you supplied your own dump for the build; the release still needs your own game data.
 
 ### Multiplayer
 
@@ -175,7 +203,13 @@ data, and the build never uploads anything.
 ### 1. Tools (Windows)
 
 1. Install [MSYS2](https://www.msys2.org/) to `C:\msys64`.
-2. In the **MSYS2 UCRT64** shell, install the compiler and libraries:
+2. Install [Rust](https://www.rust-lang.org/tools/install), the Microsoft C++ Build Tools, and the
+   [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/). The WebView2 Runtime is included with
+   current Windows 11 installations; install the Evergreen Runtime separately if it is missing.
+3. Install [Node.js 22 LTS](https://nodejs.org/) for Windows and run `npm ci` from the repository folder. The launcher
+   uses the Windows WebView2 runtime instead of bundling a browser engine, keeping its executable small and avoiding
+   per-launch browser-engine extraction.
+4. In the **MSYS2 UCRT64** shell, install the compiler and libraries:
 
    ```bash
    pacman -S --needed make git \
@@ -185,7 +219,7 @@ data, and the build never uploads anything.
      mingw-w64-ucrt-x86_64-vulkan-memory-allocator
    ```
 
-3. Install [Python](https://www.python.org/) 3.10 or newer for Windows. Then, in a Command Prompt in the repository
+5. Install [Python](https://www.python.org/) 3.10 or newer for Windows. Then, in a Command Prompt in the repository
    folder, make the tools' virtual environment (the Makefile uses `tools\venv` when it exists):
 
    ```bat
@@ -208,6 +242,7 @@ builds only recompile what changed.
 
 `make` turns `build\` into a ready-to-run game folder, and puts nothing else there (the compiler's own files go
 to `obj\`):
+- `MHGU-Launcher.exe`, the lightweight WebView2 desktop launcher (requires the WebView2 Runtime);
 - `mhgurecomp.exe`, the runtime;
 - `mhgugame.dll`, the recompiled game code;
 - the MSYS2 DLLs they need;
@@ -228,7 +263,7 @@ Useful targets and options:
 ### Making a release
 
 A release is the contents of `build\` without the game files:
-- Include `mhgurecomp.exe`, `mhgugame.dll` and all other `.dll` files.
+- Include `MHGU-Launcher.exe`, `mhgurecomp.exe`, `mhgugame.dll` and all other `.dll` files.
 - Leave out `data\`.
 
 The exe creates the `mods` and `cheats` folders and the ini on first start. Players then add their own `data\` as

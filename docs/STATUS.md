@@ -356,16 +356,18 @@ follows the import tables; ~100 DLLs, most of them FFmpeg's; never vulkan-1.dll:
 and the game files in build/data/exefs + build/data/romfs (target `data`, once: hard links to GAME's files, so no
 second copy on disk; plain copies where hard links don't work). Started without a game folder argument, the
 executable works in its own folder (runtime/main.c, platform plat_standalone): data/ for the game, cache/, mods/,
-shots/, mhgurecomp.ini and log.txt beside it (save data elsewhere, see below); with a console of its own (Explorer, a shortcut) it drops the
+shots/, save/, mhgurecomp.ini and log.txt beside it; with a console of its own (Explorer, a shortcut) it drops the
 console and logs to log.txt, and a fatal error shows a message box. `make clean` keeps all that (it removes the
 compiled files only). With a game folder argument (or MHGU_GAME_DIR) it uses the current folder as before; then the
 DLLs must be on PATH (C:\msys64\ucrt64\bin) unless it is the bundled build/mhgurecomp.exe.
 
-Save data: the standalone executable keeps saves in the player's own folder, %APPDATA%\MHGURecomp\save\ (save_0/
-system + system_backup, sdcard/), so deleting or rebuilding build/ can't take them along (platform plat_user_dir;
-the path is in the log: "[fs] mounted host directory"). With a game folder argument (the test scripts in run/) saves
-stay in save/ under the current folder, so automated runs never touch the real save. MHGU_SAVE_DIR overrides both.
-Linux (not written yet): plat_user_dir should return $XDG_DATA_HOME/MHGURecomp, else ~/.local/share/MHGURecomp.
+Save data: the Windows standalone executable keeps saves in save/ beside the game (save_0/system +
+system_backup, sdcard/), so the whole folder can move together. If save/ is absent on first launch and the previous
+%APPDATA%\MHGURecomp\save\ exists, it is copied locally and the original is kept as a backup. If the local folder
+cannot be created or the copy fails, the game falls back to AppData. With a game folder argument (the test scripts in
+run/) saves stay in save/ under the current folder, so automated runs never touch the real save. MHGU_SAVE_DIR
+overrides both. Linux (not written yet): plat_user_dir should return $XDG_DATA_HOME/MHGURecomp, else
+~/.local/share/MHGURecomp.
 First start without a save (checked 2026-10-21 with an empty save_0): the game shows "There is no data to load." and
 then the language / bonus notices; these boxes have no button prompt and only A (right click; keyboard L before 2026-10-23) closes them, B and Plus
 do nothing, so it looks frozen. After that: title, New Game; a fresh system + system_backup is written by then.
@@ -466,9 +468,10 @@ G Rank), Chamberlyne > Downloadable Content > Claim Items lists the packs and cl
 Slickaxe x20). Palico downloads not checked. The quest ARCs equal the RomFS files byte for byte, so a donor-free
 version (building the regions from the RomFS) is possible once the flag bits and the pack / Palico records are known.
 
-Controls: see `runtime/host_input.c` (keyboard and mouse: WASD, mouse look (relative mode after a click, Esc releases; the mouse speed smoothed
-over 25 ms as the right stick tilt, offset past the camera's round ~39% stick dead zone; ini [Mouse] MouseSensitivity), clicks = X / A, Space / R = B / Y, Tab / T = ZL / ZR,
-arrows = d-pad, Ctrl / Alt = stick clicks, Enter = Plus; SDL gamepads, face
+Controls: see `runtime/host_input.c` (keyboard bindings are configurable in the launcher and ini [Keyboard]; defaults:
+WASD left stick, mouse look (relative mode after a click, Esc releases; mouse speed smoothed over 25 ms as the right
+stick tilt, offset past the camera's round ~39% stick dead zone; ini [Mouse] MouseSensitivity), clicks = X / A,
+Space / R = B / Y, Tab / T = ZL / ZR, 1-4 and arrows = d-pad, Ctrl / Alt = stick clicks, Enter = Plus; SDL gamepads, face
 buttons by position (Switch layout) or label: ini FaceButtons;
 F12 screenshot, F11 8-frame burst -> shots\ in the game folder; Alt+Enter windowed / full screen; F7 cycles MSAA). Display mode,
 resolution, anti-aliasing and frame rate: mhgurecomp.ini (delete it to get the defaults back).

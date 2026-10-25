@@ -1,0 +1,20 @@
+{
+  "name": "mhgu-recomp-launcher",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Desktop launcher for MHGU Recomp",
+  "author": "MHGU Recomp project",
+  "scripts": {
+    "dev": "vite --config launcher-app/vite.config.mjs",
+    "build:ui": "vite build --config launcher-app/vite.config.mjs",
+    "build:launcher": "node scripts/build-launcher-icon.mjs && npm run build:ui",
+    "test": "node --test launcher-app/test/*.test.cjs"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.5.0"
+  },
+  "devDependencies": {
+    "png-to-ico": "3.0.2",
+    "vite": "^6.4.1"
+  }
+}

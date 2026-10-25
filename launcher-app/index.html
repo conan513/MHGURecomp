@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src ipc: http://ipc.localhost">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Monster Hunter Generations Ultimate Recomp</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="titlebar">
+      <div class="titlebar-brand">
+        <img class="brand-crest" src="../backgrounds/launcher-icon.png" alt="">
+        <span class="game-title">MONSTER HUNTER GENERATIONS ULTIMATE</span>
+        <span class="brand-divider">/</span>
+        <span class="brand-product">RECOMP</span>
+      </div>
+      <div class="window-actions">
+        <button class="window-action" data-window-action="minimize" aria-label="Minimize">−</button>
+        <button class="window-action close-action" data-window-action="close" aria-label="Close">×</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="screen home-screen" id="home-screen">
+        <div class="home-grid">
+          <div class="feature-column">
+            <div class="feature-art" role="img" aria-label="Monster Hunter Generations Ultimate artwork">
+              <span class="feature-logo"><img src="../backgrounds/logo.webp" alt="Monster Hunter Generations Ultimate"></span>
+            </div>
+          </div>
+
+          <aside class="action-column">
+            <button class="action-button play-button" id="play-button">
+              <span class="button-icon play-icon" aria-hidden="true">▶</span>
+              <strong>PLAY</strong>
+            </button>
+            <button class="action-button" id="settings-button">
+              <span class="button-icon settings-icon" aria-hidden="true">⚙</span>
+              <strong>SETTINGS</strong>
+            </button>
+            <button class="action-button" id="exit-button">
+              <span class="button-icon exit-icon" aria-hidden="true">×</span>
+              <strong>EXIT</strong>
+            </button>
+            <p class="build-status" id="build-status" hidden><i></i><span id="build-status-text"></span></p>
+          </aside>
+        </div>
+      </section>
+
+      <section class="screen settings-screen" id="settings-screen" hidden>
+        <div class="settings-heading">
+          <button class="back-button" id="back-button"><span aria-hidden="true">←</span> BACK</button>
+          <h1>SETTINGS</h1>
+          <p>Changes are saved to <code>mhgurecomp.ini</code>.</p>
+        </div>
+        <div class="settings-layout">
+          <nav class="settings-nav" id="settings-nav" aria-label="Settings categories"></nav>
+          <div class="settings-panel">
+            <div class="panel-heading">
+              <div><h2 id="category-title">Display</h2></div>
+              <span class="unsaved-indicator" id="unsaved-indicator" hidden>UNSAVED CHANGES</span>
+            </div>
+            <form id="settings-form" novalidate>
+              <div class="field-grid" id="field-grid"></div>
+              <div class="form-error" id="form-error" role="alert" hidden></div>
+              <div class="settings-actions">
+                <button class="text-button" type="button" id="reset-button">RESTORE DEFAULTS</button>
+                <span class="settings-action-spacer"></span>
+                <button class="text-button" type="button" id="open-ini-button">OPEN INI</button>
+                <button class="secondary-button" type="button" id="save-button">SAVE SETTINGS</button>
+                <button class="primary-button" type="button" id="save-play-button"><span>▶</span> SAVE &amp; PLAY</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>
+    <footer class="credits-bar">
+      <span>MADE BY CONAN · SINGLE PLAYER PROJECT</span>
+      <span>© CAPCOM CO., LTD. ALL RIGHTS RESERVED.</span>
+    </footer>
+    <div class="modal-backdrop" id="confirm-dialog" hidden>
+      <div class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+        <h2 id="confirm-title">Restore defaults?</h2>
+        <p id="confirm-copy">This will discard unsaved changes.</p>
+        <div class="confirm-actions">
+          <button class="secondary-button" id="confirm-cancel" type="button">CANCEL</button>
+          <button class="primary-button" id="confirm-accept" type="button">CONTINUE</button>
+        </div>
+      </div>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </div>
+  <script type="module" src="/renderer.js"></script>
+</body>
+</html>

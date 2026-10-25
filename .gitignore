@@ -10,6 +10,12 @@
 /mods/
 /data/
 tools/venv/
+/node_modules/
+/dist/
+/launcher-app/launcher_icon.ico
+/src-tauri/target/
+/src-tauri/icons/
+/src-tauri/gen/
 __pycache__/
 *.pyc
 *.o
