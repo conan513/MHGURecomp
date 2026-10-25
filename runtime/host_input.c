@@ -32,12 +32,12 @@ static bool keys[SDL_SCANCODE_COUNT];
 static SDL_Gamepad *pad;
 
 static const struct { SDL_Scancode sc; int btn; } key_buttons[] = {
-    {SDL_SCANCODE_SPACE, BTN_B}, {SDL_SCANCODE_R, BTN_Y},
-    {SDL_SCANCODE_Q, BTN_L}, {SDL_SCANCODE_E, BTN_R}, {SDL_SCANCODE_TAB, BTN_ZL}, {SDL_SCANCODE_T, BTN_ZR},
-    {SDL_SCANCODE_RETURN, BTN_PLUS}, {SDL_SCANCODE_KP_ENTER, BTN_PLUS}, {SDL_SCANCODE_BACKSPACE, BTN_MINUS},
-    {SDL_SCANCODE_UP, BTN_UP}, {SDL_SCANCODE_LEFT, BTN_LEFT}, {SDL_SCANCODE_DOWN, BTN_DOWN}, {SDL_SCANCODE_RIGHT, BTN_RIGHT},
-    {SDL_SCANCODE_LCTRL, BTN_LSTICK}, {SDL_SCANCODE_RCTRL, BTN_LSTICK},
-    {SDL_SCANCODE_LALT, BTN_RSTICK}, {SDL_SCANCODE_RALT, BTN_RSTICK},
+    {SDL_SCANCODE_SPACE, BTN_B}, {SDL_SCANCODE_E, BTN_Y},
+    {SDL_SCANCODE_Q, BTN_L}, {SDL_SCANCODE_LSHIFT, BTN_R}, {SDL_SCANCODE_TAB, BTN_ZL}, {SDL_SCANCODE_R, BTN_ZR},
+    {SDL_SCANCODE_RETURN, BTN_PLUS}, {SDL_SCANCODE_KP_ENTER, BTN_PLUS}, {SDL_SCANCODE_ESCAPE, BTN_PLUS},
+    {SDL_SCANCODE_C, BTN_MINUS}, {SDL_SCANCODE_1, BTN_UP}, {SDL_SCANCODE_2, BTN_RIGHT}, {SDL_SCANCODE_3, BTN_DOWN},
+    {SDL_SCANCODE_4, BTN_LEFT}, {SDL_SCANCODE_LCTRL, BTN_LSTICK}, {SDL_SCANCODE_F, BTN_A},
+    {SDL_SCANCODE_LALT, BTN_RSTICK}, {SDL_SCANCODE_V, BTN_MINUS},
 };
 
 // ---- mouse: captured (relative mode) after a click in the window, Esc lets it go. Its movement is the right stick:
@@ -341,7 +341,7 @@ void host_input_event(const SDL_Event *e) {
                 keys[e->key.scancode] = false;  // (Alt+Enter: windowed <-> full screen, not a button press)
                 keys[SDL_SCANCODE_LALT] = keys[SDL_SCANCODE_RALT] = false;
                 ui_toggle_fullscreen();
-            } else if (e->key.scancode == SDL_SCANCODE_ESCAPE) {
+            } else if (e->key.scancode == SDL_SCANCODE_F1) {
                 if (mouse_grab) LOG("[input] mouse released\n");
                 mouse_grab = false;
             } else if (e->key.scancode == SDL_SCANCODE_F12)
@@ -452,7 +452,7 @@ void host_input_update(void) {
     for (unsigned i = 0; i < sizeof key_buttons / sizeof *key_buttons; i++)
         if (keys[key_buttons[i].sc]) b |= B(key_buttons[i].btn);
     int kx = keys[SDL_SCANCODE_D] - keys[SDL_SCANCODE_A], ky = keys[SDL_SCANCODE_W] - keys[SDL_SCANCODE_S];
-    int k = keys[SDL_SCANCODE_LSHIFT] ? 16000 : 32767;
+    int k = 32767;
     if (kx && ky) k = k * 7071 / 10000;  // diagonals: same length as straight
     lx += kx * k, ly += ky * k;
     b |= mouse_buttons;
