@@ -66,7 +66,10 @@ const controlIslands = [
 
 const categoryFields = {
   display: ['mode', 'resolution', 'renderResolution', 'aspectRatio', 'fov', 'uiAnchor'],
-  graphics: ['msaa', 'fxaa', 'ssao', 'fps', 'vsync'],
+  graphics: [
+    'msaa', 'fxaa', 'ssao', 'fsr', 'fsrQuality', 'fsrSharpness',
+    'fsrObjectMotion', 'fsrReactive', 'fsrAnimSurf', 'fps', 'vsync',
+  ],
   controls: [],
   multiplayer: ['port', 'join', 'syncSmallMonsters'],
   gameplay: ['villageQuestsInHub', 'hubHp', 'bonusContent', 'hp1', 'hp2', 'hp3', 'hp4', 'quests'],
@@ -117,6 +120,12 @@ const fieldInfo = {
   msaa: { label: 'MSAA', kind: 'select', options: ['Off', '2x', '4x', '8x'], help: 'Multisample anti-aliasing.' },
   fxaa: { label: 'FXAA', kind: 'toggle', help: 'A lightweight post-processing anti-aliasing pass.' },
   ssao: { label: 'SSAO', kind: 'toggle', help: 'Experimental screen-space contact shadows. Requires a matching scene depth buffer and may reduce performance.' },
+  fsr: { label: 'FSR 3.1', kind: 'toggle', help: 'Temporal upscaling. Renders the 3D scene at a lower resolution and reconstructs it at the output resolution; the HUD stays full resolution. MSAA and FXAA are disabled while FSR is active.' },
+  fsrQuality: { label: 'FSR quality', kind: 'select', options: ['NativeAA', 'Quality', 'Balanced', 'Performance', 'UltraPerformance'], help: 'Higher quality renders closer to the output resolution; Performance modes render faster but look softer.' },
+  fsrSharpness: { label: 'FSR sharpness', kind: 'number', min: 0, max: 1, step: 0.1, help: 'Sharpening strength, from off to strongest.' },
+  fsrObjectMotion: { label: 'Object motion vectors', kind: 'toggle', help: 'Tracks moving characters and monsters to reduce temporal ghosting. Can be disabled if it causes issues.' },
+  fsrReactive: { label: 'Reactive mask strength', kind: 'number', min: 0, max: 1, step: 0.1, help: 'Helps preserve detail on moving objects; set to 0 to disable.' },
+  fsrAnimSurf: { label: 'Animated surface detection', kind: 'toggle', help: 'Detects texture-animated surfaces such as water to reduce ghosting.' },
   fps: {
     label: 'Frame rate limit',
     kind: 'preset',

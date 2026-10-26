@@ -116,6 +116,54 @@ const FIELDS: &[Field] = &[
         kind: FieldKind::Toggle,
     },
     Field {
+        section: "Upscaler",
+        key: "FSR",
+        id: "fsr",
+        default: "Off",
+        kind: FieldKind::Toggle,
+    },
+    Field {
+        section: "Upscaler",
+        key: "FSRQuality",
+        id: "fsrQuality",
+        default: "NativeAA",
+        kind: FieldKind::Select(&[
+            "NativeAA",
+            "Quality",
+            "Balanced",
+            "Performance",
+            "UltraPerformance",
+        ]),
+    },
+    Field {
+        section: "Upscaler",
+        key: "Sharpness",
+        id: "fsrSharpness",
+        default: "0.8",
+        kind: FieldKind::Decimal(0.0, 1.0),
+    },
+    Field {
+        section: "Upscaler",
+        key: "ObjectMotion",
+        id: "fsrObjectMotion",
+        default: "On",
+        kind: FieldKind::Toggle,
+    },
+    Field {
+        section: "Upscaler",
+        key: "Reactive",
+        id: "fsrReactive",
+        default: "0.9",
+        kind: FieldKind::Decimal(0.0, 1.0),
+    },
+    Field {
+        section: "Upscaler",
+        key: "AnimSurf",
+        id: "fsrAnimSurf",
+        default: "On",
+        kind: FieldKind::Toggle,
+    },
+    Field {
         section: "Performance",
         key: "FPS",
         id: "fps",
@@ -456,6 +504,7 @@ const FIELDS: &[Field] = &[
 const CANONICAL_SECTIONS: &[&str] = &[
     "Display",
     "Anti-aliasing",
+    "Upscaler",
     "Performance",
     "Controls",
     "Keyboard",
@@ -1218,6 +1267,40 @@ mod tests {
             { "id": 456, "value": "1, 1.2, 1.5, 2.0" }
         ]);
         assert!(validate_settings(&settings).is_empty());
+    }
+
+    #[test]
+    fn fsr_options_are_validated_and_saved() {
+        let directory = temp_directory();
+        let mut settings = default_settings();
+        settings["fsr"] = json!("On");
+        settings["fsrQuality"] = json!("Balanced");
+        settings["fsrSharpness"] = json!("0.5");
+        settings["fsrObjectMotion"] = json!("Off");
+        settings["fsrReactive"] = json!("1.0");
+        settings["fsrAnimSurf"] = json!("Off");
+        assert!(validate_settings(&settings).is_empty());
+
+        save_settings(&directory, &settings).expect("save FSR settings");
+        let output = fs::read_to_string(ini_path(&directory)).expect("read updated ini");
+        assert!(output.contains("[Upscaler]"));
+        assert!(output.contains("FSR = On"));
+        assert!(output.contains("FSRQuality = Balanced"));
+        assert!(output.contains("Sharpness = 0.5"));
+        assert!(output.contains("ObjectMotion = Off"));
+        assert!(output.contains("Reactive = 1.0"));
+        assert!(output.contains("AnimSurf = Off"));
+        let loaded = read_settings(&directory).expect("reload settings");
+        assert_eq!(loaded["fsr"], "On");
+        assert_eq!(loaded["fsrQuality"], "Balanced");
+        assert_eq!(loaded["fsrSharpness"], "0.5");
+        assert_eq!(loaded["fsrObjectMotion"], "Off");
+        assert_eq!(loaded["fsrReactive"], "1.0");
+        assert_eq!(loaded["fsrAnimSurf"], "Off");
+
+        settings["fsrSharpness"] = json!("1.1");
+        assert!(validate_settings(&settings).contains_key("fsrSharpness"));
+        fs::remove_dir_all(directory).expect("clean temp directory");
     }
 
     #[test]

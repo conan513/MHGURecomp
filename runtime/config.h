@@ -4,6 +4,7 @@
 
 enum { DISPLAY_WINDOWED, DISPLAY_FULLSCREEN, DISPLAY_BORDERLESS };
 enum { FACE_POSITION, FACE_LABEL };
+enum { FSR_NATIVE, FSR_QUALITY, FSR_BALANCED, FSR_PERFORMANCE, FSR_ULTRA_PERFORMANCE };
 enum { MOUSE_LEFT, MOUSE_MIDDLE, MOUSE_RIGHT, MOUSE_X1, MOUSE_X2, MOUSE_BUTTON_COUNT };
 enum {
     KEY_DPAD_UP,
@@ -57,6 +58,12 @@ typedef struct {
     int msaa;                 // samples of the 3D scene: 1 (off), 2, 4, 8
     int fxaa;                 // the game's own FXAA pass: 1 on, 0 off
     int ssao;                 // presentation-time screen-space ambient occlusion: 1 on, 0 off
+    int fsr;                  // [Upscaler] FSR 3.1: 1 on, 0 off
+    int fsr_quality;          // FSR_*: render resolution ratio
+    float fsr_sharpness;      // FSR RCAS sharpening, 0..1
+    int fsr_objmotion;        // object motion vectors: 1 on, 0 camera only
+    float fsr_reactive;       // reactive mask strength: 0..1
+    int fsr_animsurf;         // animated surface detection: 1 on, 0 off
     int face_buttons;         // FACE_*: controller face buttons by position (the Switch layout) or by their labels
     int ldn_port;             // local play: the port a hosted hub listens on (TCP; UDP for LAN search)
     char ldn_join[256];       // local play: hosts to search besides the LAN (host[:port], comma separated)
@@ -80,6 +87,8 @@ extern float g_render_aspect;      // the picture's shape, 16:10 or wider: the 3
 extern float g_fov_scale;          // 3D camera field of view factor (tools/gen.py PATCHES)
 extern uint32_t g_ui_size[2];      // the game's 2D canvas size (tools/gen.py PATCHES: 0xdbcd48, 0xdbcd54)
 extern float g_ui_anchor_aspect;   // the HUD's width / height, 16:9 .. g_render_aspect (nvn/vulkan/exec.c)
+extern uint32_t g_fsr_output[2]; // FSR output size; zero when FSR is off
+extern float g_fsr_lod_bias;     // FSR texture LOD bias for the lower render resolution
 float camera_fovy(float fovy, float aspect);  // a 3D camera's vertical field of view for its aspect (gen.py PATCHES)
 
 void config_load(void);  // before the window and the guest start

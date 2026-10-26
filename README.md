@@ -11,7 +11,7 @@ Status: fully playable, but there may be some bugs. I've played a dozen hunts wi
 
 ## What it adds over the Switch version
 
-- Graphics settings (resolution, MSAA, FXAA, Supersampling, VSync)
+- Graphics settings (resolution, MSAA, FXAA, Supersampling, FSR 3.1, VSync)
 - Any screen shape from 16:10 to ultrawide (21:9, 32:9 and wider), with the HUD unstretched: centered or spread to
   the screen's sides
 - Frame rate cap anywhere between 30-240 fps
@@ -137,6 +137,7 @@ settings it does not manage. The ini file can still be edited manually. In short
   (1.0 = the game's), `UIAnchor` (Center keeps the HUD in the middle 16:9 on an ultrawide screen, Edges spreads it
   to the sides)
 - `[Anti-aliasing]`: `MSAA` (Off / 2x / 4x / 8x), `FXAA` (On / Off), `SSAO` (On / Off; experimental screen-space contact shadows, only when a matching depth buffer is available)
+- `[Upscaler]`: `FSR` (On / Off), `FSRQuality` (NativeAA / Quality / Balanced / Performance / UltraPerformance), `Sharpness` (0 to 1), `ObjectMotion`, `Reactive` (0 to 1), and `AnimSurf`. FSR renders the 3D scene below output resolution and reconstructs it temporally; the HUD remains at output resolution. MSAA and FXAA are disabled while FSR is active. Some GPUs may not expose the Vulkan features FSR requires, in which case the game falls back to ordinary scaling. See [FSR implementation notes](docs/FSR-PORT.md).
 - `[Performance]`: `FPS` (30 to 240), `VSync` (On / Off; above your monitor's refresh rate, turn VSync off)
 - `[Keyboard]`: configurable keys for the keyboard's Switch buttons and stick directions
 - `[Controls]`: `FaceButtons` (Position / Label), `BackgroundInput` (On / Off: the controller keeps working while

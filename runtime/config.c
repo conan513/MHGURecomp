@@ -4,6 +4,8 @@
 //   MHGU_CONFIG=<path>   another settings file
 //   MHGU_WINDOW=WxH      windowed at that size, MHGU_RENDER=WxH  3D resolution, MHGU_MSAA=1|2|4|8, MHGU_FXAA=0|1,
 //                        MHGU_SSAO=0|1,
+//                        MHGU_FSR=0|1, MHGU_FSR_QUALITY=<name>, MHGU_FSR_SHARPNESS=<0..1>,
+//                        MHGU_FSR_REACTIVE=<0..1>, MHGU_FSR_OBJMOTION=0|1, MHGU_FSR_ANIMSURF=0|1,
 //                        MHGU_PAD_POSITIONAL=0|1 (test runs; override the file)
 #include <ctype.h>
 #include <math.h>
@@ -26,6 +28,11 @@ Config g_config = {
     .vsync = 1,
     .msaa = 1,
     .fxaa = 1,
+    .fsr_quality = FSR_NATIVE,
+    .fsr_sharpness = 0.8f,
+    .fsr_objmotion = 1,
+    .fsr_reactive = 0.9f,
+    .fsr_animsurf = 1,
     .face_buttons = FACE_POSITION,
     .ldn_port = 39500,
     .sync_small_monsters = 1,
@@ -54,6 +61,8 @@ float g_render_aspect = 16.0f / 9.0f;
 float g_fov_scale = 1.0f;
 uint32_t g_ui_size[2] = {1280, 720};
 float g_ui_anchor_aspect = 16.0f / 9.0f;
+uint32_t g_fsr_output[2];
+float g_fsr_lod_bias;
 
 static const char DEFAULT_INI[] =
     "; MHGU Recomp settings. Delete this file to get the defaults back: it is written again at the next start.\n"
@@ -96,6 +105,27 @@ static const char DEFAULT_INI[] =
     "; SSAO: On or Off. Adds subtle screen-space contact shadows; may reduce performance or darken image edges.\n"
     "; This is experimental and only applies when a matching scene depth buffer is available.\n"
     "SSAO = Off\n"
+    "\n"
+    "[Upscaler]\n"
+    "; FSR: On or Off. AMD FidelityFX Super Resolution 3.1 temporal upscaling. It renders the 3D picture at a lower\n"
+    "; resolution and reconstructs it at RenderResolution (or the display resolution with Auto). The HUD stays full\n"
+    "; resolution. MSAA and FXAA are disabled while FSR is active.\n"
+    "FSR = Off\n"
+    "\n"
+    "; FSRQuality: NativeAA, Quality, Balanced, Performance or UltraPerformance.\n"
+    "FSRQuality = NativeAA\n"
+    "\n"
+    "; Sharpness: FSR sharpening, 0 (off) to 1 (strongest).\n"
+    "Sharpness = 0.8\n"
+    "\n"
+    "; ObjectMotion: On tracks characters and monsters; Off uses camera motion only.\n"
+    "ObjectMotion = On\n"
+    "\n"
+    "; Reactive: strength of the moving-object mask, from 0 (off) to 1.\n"
+    "Reactive = 0.9\n"
+    "\n"
+    "; AnimSurf: On detects surfaces animated through their textures to reduce ghosting.\n"
+    "AnimSurf = On\n"
     "\n"
     "[Performance]\n"
     "; Frame rate cap: 30 (the Switch version's rate) to 240. Game speed stays the same at any rate.\n"
@@ -283,6 +313,16 @@ static bool parse_anchor(const char *v, int *out) {
     return true;
 }
 
+static bool parse_fsr_quality(const char *v, int *out) {
+    if (!strcmp(v, "nativeaa") || !strcmp(v, "native") || !strcmp(v, "aa")) *out = FSR_NATIVE;
+    else if (!strcmp(v, "quality")) *out = FSR_QUALITY;
+    else if (!strcmp(v, "balanced")) *out = FSR_BALANCED;
+    else if (!strcmp(v, "performance")) *out = FSR_PERFORMANCE;
+    else if (!strcmp(v, "ultraperformance") || !strcmp(v, "ultraperf")) *out = FSR_ULTRA_PERFORMANCE;
+    else return false;
+    return true;
+}
+
 static int desktop_w, desktop_h;
 static bool render_auto = true;
 
@@ -391,6 +431,25 @@ static void set_key(const char *key, char *val, int line) {
         if (!strcmp(v, "on") || !strcmp(v, "1") || !strcmp(v, "true") || !strcmp(v, "yes")) g_config.ssao = 1;
         else if (!strcmp(v, "off") || !strcmp(v, "0") || !strcmp(v, "false") || !strcmp(v, "no")) g_config.ssao = 0;
         else ok = false;
+    } else if (!strcmp(k, "fsr")) {
+        if (!strcmp(v, "on") || !strcmp(v, "1") || !strcmp(v, "true") || !strcmp(v, "yes")) g_config.fsr = 1;
+        else if (!strcmp(v, "off") || !strcmp(v, "0") || !strcmp(v, "false") || !strcmp(v, "no")) g_config.fsr = 0;
+        else ok = false;
+    } else if (!strcmp(k, "fsrquality")) {
+        ok = parse_fsr_quality(v, &g_config.fsr_quality);
+    } else if (!strcmp(k, "sharpness")) {
+        char *end;
+        float f = strtof(v, &end);
+        if ((ok = end != v && !*end && f >= 0.0f && f <= 1.0f)) g_config.fsr_sharpness = f;
+    } else if (!strcmp(k, "objectmotion") || !strcmp(k, "animsurf")) {
+        int *setting = !strcmp(k, "objectmotion") ? &g_config.fsr_objmotion : &g_config.fsr_animsurf;
+        if (!strcmp(v, "on") || !strcmp(v, "1") || !strcmp(v, "true") || !strcmp(v, "yes")) *setting = 1;
+        else if (!strcmp(v, "off") || !strcmp(v, "0") || !strcmp(v, "false") || !strcmp(v, "no")) *setting = 0;
+        else ok = false;
+    } else if (!strcmp(k, "reactive")) {
+        char *end;
+        float f = strtof(v, &end);
+        if ((ok = end != v && !*end && f >= 0.0f && f <= 1.0f)) g_config.fsr_reactive = f;
     } else if (!strcmp(k, "vsync")) {
         if (!strcmp(v, "on") || !strcmp(v, "1") || !strcmp(v, "true") || !strcmp(v, "yes")) g_config.vsync = 1;
         else if (!strcmp(v, "off") || !strcmp(v, "0") || !strcmp(v, "false") || !strcmp(v, "no")) g_config.vsync = 0;
@@ -548,6 +607,19 @@ void config_load(void) {
     if ((e = getenv("MHGU_MSAA"))) g_config.msaa = atoi(e) >= 8 ? 8 : atoi(e) >= 4 ? 4 : atoi(e) >= 2 ? 2 : 1;
     if ((e = getenv("MHGU_FXAA"))) g_config.fxaa = atoi(e) != 0;
     if ((e = getenv("MHGU_SSAO"))) g_config.ssao = atoi(e) != 0;
+    if ((e = getenv("MHGU_FSR"))) g_config.fsr = atoi(e) != 0;
+    if ((e = getenv("MHGU_FSR_QUALITY"))) {
+        char quality[32];
+        snprintf(quality, sizeof quality, "%s", e);
+        squash(quality);
+        parse_fsr_quality(quality, &g_config.fsr_quality);
+    }
+    if ((e = getenv("MHGU_FSR_OBJMOTION"))) g_config.fsr_objmotion = atoi(e) != 0;
+    if ((e = getenv("MHGU_FSR_ANIMSURF"))) g_config.fsr_animsurf = atoi(e) != 0;
+    if ((e = getenv("MHGU_FSR_SHARPNESS")) && strtof(e, NULL) >= 0.0f && strtof(e, NULL) <= 1.0f)
+        g_config.fsr_sharpness = strtof(e, NULL);
+    if ((e = getenv("MHGU_FSR_REACTIVE")) && strtof(e, NULL) >= 0.0f && strtof(e, NULL) <= 1.0f)
+        g_config.fsr_reactive = strtof(e, NULL);
     if ((e = getenv("MHGU_BACKGROUND_INPUT"))) g_config.background_input = atoi(e) != 0;
     if ((e = getenv("MHGU_PAD_POSITIONAL"))) g_config.face_buttons = atoi(e) ? FACE_POSITION : FACE_LABEL;
     if ((e = getenv("MHGU_LDN_PORT")) && atoi(e) > 0) g_config.ldn_port = atoi(e);
@@ -571,13 +643,33 @@ void config_load(void) {
         aspect = 1.6f;
     }
     if (fabsf(aspect - 16.0f / 9.0f) < 0.01f) aspect = 16.0f / 9.0f;  // (1366x768 and the like)
-    if (render_auto) {
+    if (render_auto && g_config.fsr && g_config.display_mode == DISPLAY_BORDERLESS && (tw < desktop_w || th < desktop_h)) {
+        fit_aspect(desktop_w, desktop_h, aspect, &w, &h);
+        LOG("[config] FSR, Borderless: upscaling to %dx%d (the screen, in the picture's shape) instead of Resolution %dx%d\n",
+            w, h, tw, th);
+    } else if (render_auto) {
         fit_aspect(tw, th, aspect, &w, &h);
     } else {
         fit_aspect(g_config.render_w, g_config.render_h, aspect, &w, &h);
         if (w != g_config.render_w || h != g_config.render_h)
             LOG("[config] RenderResolution %dx%d is not the picture's shape (%.3f): using %dx%d\n", g_config.render_w,
                 g_config.render_h, aspect, w, h);
+    }
+    if (g_config.fsr) {
+        static const float ratios[] = {1.0f, 1.5f, 1.7f, 2.0f, 3.0f};
+        static const char *const names[] = {"NativeAA", "Quality", "Balanced", "Performance", "UltraPerformance"};
+        g_fsr_output[0] = (uint32_t)w;
+        g_fsr_output[1] = (uint32_t)h;
+        float ratio = ratios[g_config.fsr_quality];
+        fit_aspect((int)(w / ratio + 0.5f), (int)(h / ratio + 0.5f), aspect, &w, &h);
+        if (g_config.msaa > 1) LOG("[config] FSR is on: MSAA off (FSR does the anti-aliasing)\n");
+        if (g_config.fxaa) LOG("[config] FSR is on: FXAA off (FSR does the anti-aliasing)\n");
+        g_config.msaa = 1;
+        g_config.fxaa = 0;
+        g_fsr_lod_bias = log2f((float)w / (float)g_fsr_output[0]);
+        if ((e = getenv("MHGU_FSR_LODBIAS"))) g_fsr_lod_bias = strtof(e, NULL);
+        LOG("[config] FSR %s (x%.1f): the 3D picture at %dx%d, upscaled to %ux%u, sharpness %.2f, texture LOD bias %.2f\n",
+            names[g_config.fsr_quality], ratio, w, h, g_fsr_output[0], g_fsr_output[1], g_config.fsr_sharpness, g_fsr_lod_bias);
     }
     g_config.render_w = w, g_config.render_h = h;
     g_render_size[0] = (uint32_t)w;

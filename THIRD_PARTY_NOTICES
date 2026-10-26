@@ -9,9 +9,15 @@ below.
   through https://github.com/Lawrence-al/forge/commit/bbc540f4b831881f4980a4939a049cc14c31b9e4. MIT License.
 - cimgui (third_party/cimgui): MIT License.
 - Dear ImGui (third_party/cimgui/imgui): MIT License.
+- FSR-Vulkan (third_party/fsr-vulkan): the portable FSR 3.1 Vulkan wrapper, MIT License (copyright (c) 2026 Q2RTX FSR Vulkan contributors).
+- AMD FidelityFX SDK 1.1.4 and FidelityFX API headers (the FSR 3.1.4 upscaler host, Vulkan backend, generated shader code, and headers in third_party/fsr-vulkan and third_party/ffx-api): MIT License, copyright (c) 2024 Advanced Micro Devices, Inc.
 
 Libraries the program links to at run time (SDL3, FFmpeg, the Vulkan loader, shaderc, VulkanMemoryAllocator) are not
 part of this repository; their licenses apply to the copies a build or a release uses.
+
+The full FSR-Vulkan and FidelityFX SDK MIT license texts are reproduced below and retained with the vendored sources
+in `third_party/fsr-vulkan/LICENSE.txt`, `third_party/fsr-vulkan/upstream/ffx-1.1.4/sdk/LICENSE.txt`, and
+`third_party/ffx-api/LICENSE.txt`.
 
 
 ================================================================================
@@ -121,3 +127,57 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+
+================================================================================
+FSR-Vulkan
+================================================================================
+
+MIT License
+
+Copyright (c) 2026 Q2RTX FSR Vulkan contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+================================================================================
+AMD FidelityFX SDK 1.1.4
+================================================================================
+
+This file is part of the FidelityFX SDK.
+
+Copyright (C) 2024 Advanced Micro Devices, Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files(the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
