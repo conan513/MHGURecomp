@@ -127,7 +127,7 @@ const fieldInfo = {
   },
   msaa: { label: 'MSAA', kind: 'select', options: ['Off', '2x', '4x', '8x'], help: 'Multisample anti-aliasing.' },
   fxaa: { label: 'FXAA', kind: 'toggle', help: 'A lightweight post-processing anti-aliasing pass.' },
-  ssao: { label: 'SSAO', kind: 'toggle', help: 'Experimental depth-aware contact shadows with a small scene-space radius. Requires a matching scene depth buffer and main-camera data; may reduce performance.' },
+  ssao: { label: 'SSAO', kind: 'toggle', help: 'Experimental depth-aware contact shadows, including around skybox edges. Needs scene depth, so flat 2D loading screens are unaffected; may reduce performance.' },
   fsr: { label: 'FSR 3.1', kind: 'toggle', help: 'Temporal upscaling. Renders the 3D scene at a lower resolution and reconstructs it at the output resolution; the HUD stays full resolution. MSAA and FXAA are disabled while FSR is active.' },
   fsrQuality: { label: 'FSR quality', kind: 'select', options: ['NativeAA', 'Quality', 'Balanced', 'Performance', 'UltraPerformance'], help: 'Higher quality renders closer to the output resolution; Performance modes render faster but look softer.' },
   fsrSharpness: { label: 'FSR sharpness', kind: 'number', min: 0, max: 1, step: 0.1, help: 'Sharpening strength, from off to strongest.' },
