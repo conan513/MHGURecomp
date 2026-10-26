@@ -26,6 +26,7 @@ static void ImGui_ImplVulkan_UpdateTexture(ImTextureData *) {}
 #endif
 
 #include "forge.h"
+#include "forge_font_ranges.h"
 #include "overlay.h"
 
 #define LOG(...) fprintf(stderr, __VA_ARGS__)
@@ -330,7 +331,8 @@ void overlay_init(const char *font_path, float font_size, int menu_key) {
     g_font_size = font_size > 0 ? font_size : 12.0f;
     ImFontConfig cfg;
     cfg.SizePixels = g_font_size;
-    ImFont *font = font_path ? io.Fonts->AddFontFromFileTTF(font_path, g_font_size, &cfg) : nullptr;
+    ImFont *font = font_path ? io.Fonts->AddFontFromFileTTF(font_path, g_font_size, &cfg, forge_font_glyph_ranges)
+                             : nullptr;
     if (!font) io.Fonts->AddFontDefaultVector(&cfg);
     ImGui::StyleColorsDark();
     forge_style(ImGui::GetStyle());

@@ -13,12 +13,14 @@
 // (imgui_internal.h) are opaque: their address is all that means something. An object in the plugin's own memory
 // (a struct of its own passed by address) gets a host object of its own, kept in step the same way.
 #include <stdarg.h>
+#include <float.h>
 #include <string.h>
 
 #define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
 #include "cimgui.h"
 
 #include "forge.h"
+#include "forge_font_ranges.h"
 #include "hle.h"
 
 // ------------------------------------------------------------------ argument helpers (used by the thunks)
@@ -30,6 +32,15 @@ static inline double ig_d(uint32_t lo, uint32_t hi) {
     double d;
     memcpy(&d, &v, 8);
     return d;
+}
+
+static __thread char ig_font_path_buf[1400];
+static const char *ig_font_path(uint32_t addr) {
+    const char *path = GP(addr);
+    if (!path) return NULL;
+    if (forge_resolve_romfs_path(path, ig_font_path_buf, sizeof ig_font_path_buf)) return ig_font_path_buf;
+    LOG("[forge] ImGui font '%s' not found in the game or mod RomFS; skipping\n", path);
+    return NULL;
 }
 
 static bool in_guest(const void *p) {
@@ -359,6 +370,102 @@ static float tr_getter_float(void *user, int idx) {
 
 // ------------------------------------------------------------------ the calls (generated)
 #include "forge_imgui_thunks.inc"
+
+HLE_FUNC("ImFont_CalcTextSizeA", ig_ImFont_CalcTextSizeA) {
+    uint32_t ret = c->r[0];
+    uint32_t font = c->r[1];
+    float size = ig_f(c->r[2]);
+    float max_width = ig_f(c->r[3]);
+    float wrap_width = ig_f(STK(0));
+    uint32_t text_begin = STK(1);
+    uint32_t text_end = STK(2);
+    uint32_t out_remaining = STK(3);
+
+    IG_ENTER(c);
+    ImFont *host_font = m_in(font, T_ImFont);
+    const char *host_remaining = NULL;
+    ImVec2_c result = ImFont_CalcTextSizeA(host_font, size, max_width, wrap_width, GP(text_begin), GP(text_end),
+                                          out_remaining ? &host_remaining : NULL);
+    if (out_remaining) ST32(out_remaining, h2g_quiet(host_remaining));
+    m_after(font);
+    IG_LEAVE(c);
+
+    memcpy(G2H(ret), &result, sizeof result);
+    c->r[0] = ret;
+}
+
+HLE_FUNC("ImFontAtlas_GetGlyphRangesDefault", ig_ImFontAtlas_GetGlyphRangesDefault) {
+    static uint32_t guest_ranges;
+    if (!guest_ranges) {
+        guest_ranges = hle_alloc(sizeof forge_font_glyph_ranges);
+        if (!guest_ranges) {
+            LOG("[forge] could not allocate guest ImGui glyph ranges\n");
+            c->r[0] = 0;
+            return;
+        }
+        memcpy(G2H(guest_ranges), forge_font_glyph_ranges, sizeof forge_font_glyph_ranges);
+    }
+    c->r[0] = guest_ranges;
+}
+
+static uint32_t ff14_name_font;
+
+HLE_FUNC("ImFontAtlas_AddFontFromFileTTF", ig_ImFontAtlas_AddFontFromFileTTF) {
+    uint32_t atlas = c->r[0];
+    uint32_t filename = c->r[1];
+    float size = ig_f(c->r[2]);
+    uint32_t config = c->r[3];
+    uint32_t glyph_ranges = STK(0);
+    const char *source_path = GP(filename);
+
+    IG_ENTER(c);
+    ImFontAtlas *host_atlas = m_in(atlas, T_ImFontAtlas);
+    const char *host_path = ig_font_path(filename);
+    ImFontConfig *host_config = m_in(config, T_ImFontConfig);
+    const ImWchar *host_ranges = glyph_ranges ? GP(glyph_ranges) : forge_font_glyph_ranges;
+    ImFont *font = host_path ? ImFontAtlas_AddFontFromFileTTF(host_atlas, host_path, size, host_config, host_ranges)
+                             : NULL;
+    m_after(atlas);
+    m_after(config);
+    IG_LEAVE(c);
+
+    c->r[0] = m_out(font, T_ImFont);
+    if (source_path && strstr(source_path, "ff14dmg-name.ttf")) ff14_name_font = c->r[0];
+}
+
+HLE_FUNC("ImDrawList_AddText_FontPtr", ig_ImDrawList_AddText_FontPtr) {
+    uint32_t draw_list = c->r[0];
+    uint32_t font = c->r[1];
+    float font_size = ig_f(c->r[2]);
+    ImVec2_c pos = {ig_f(c->r[3]), ig_f(STK(0))};
+    uint32_t color = STK(1);
+    uint32_t text_begin = STK(2);
+    uint32_t text_end = STK(3);
+    float wrap_width = ig_f(STK(4));
+    uint32_t clip_rect = STK(5);
+
+    IG_ENTER(c);
+    ImDrawList *host_draw_list = m_in(draw_list, T_ImDrawList);
+    ImFont *host_font = m_in(font, T_ImFont);
+    ImVec4 *host_clip_rect = m_in(clip_rect, T_ImVec4);
+    const char *begin = GP(text_begin);
+    const char *end = GP(text_end);
+    ImDrawList_AddText_FontPtr(host_draw_list, host_font, font_size, pos, color, begin, end, wrap_width,
+                               host_clip_rect);
+    if (font == ff14_name_font && begin && begin[0] && font_size > 0.0f) {
+        ImVec2_c text_size = ImFont_CalcTextSizeA(host_font, font_size, FLT_MAX, 0.0f, begin, end, NULL);
+        float gap = font_size * 0.18f;
+        float x = pos.x + text_size.x + gap;
+        float top = pos.y + font_size * 0.14f;
+        float bottom = pos.y + font_size * 0.86f;
+        ImDrawList_AddLine(host_draw_list, (ImVec2_c){x, top}, (ImVec2_c){x, bottom}, color,
+                           font_size * 0.035f > 1.0f ? font_size * 0.035f : 1.0f);
+    }
+    m_after(draw_list);
+    m_after(font);
+    m_after(clip_rect);
+    IG_LEAVE(c);
+}
 
 // ------------------------------------------------------------------ the calls written by hand
 // Allocators: plugins' ImGui memory is guest memory (the guest's malloc / free, as Forge's own alloc functions do)

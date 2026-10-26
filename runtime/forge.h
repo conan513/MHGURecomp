@@ -13,6 +13,7 @@ struct Cpu;
 // forge.c
 // printf with the guest's arguments: variadic ones from core register reg (4: none left) on, then the stack at stk
 void forge_format(char *out, size_t n, const char *fmt, struct Cpu *c, int reg, uint32_t stk);
+bool forge_resolve_romfs_path(const char *path, char *out, size_t n);
 // the plugins' ImGui entry points: FORGE_IMGUI_INIT forge_onImGuiInit(ctx, alloc, free), FORGE_IMGUI_RENDER
 // forge_onImGuiRender() (in Forge's window), FORGE_IMGUI_FREE_RENDER forge_onImGuiFreeRender() (every frame)
 enum { FORGE_IMGUI_INIT, FORGE_IMGUI_RENDER, FORGE_IMGUI_FREE_RENDER };

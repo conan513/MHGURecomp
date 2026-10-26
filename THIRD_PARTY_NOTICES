@@ -4,7 +4,9 @@ below.
 - LAS Recomp: the runtime's kernel, IPC, loader, dispatch and NVN object code and the Maxwell shader translator
   (runtime/kernel.c, ipc.c, loader.c, dispatch.c, runtime/nvn/objects.c, cmdbuf.c, maxwell/translate.c and others)
   were ported from it and adapted to 32-bit ARM. MIT License.
-- Forge (the MHGU plugin loader): the ImGui overlay's style (runtime/overlay.cpp) follows Forge's own. MIT License.
+- Forge (the MHGU plugin loader): the host-side plugin and ImGui adapters are in runtime/forge.c and
+  runtime/forge_imgui.c; the overlay's style (runtime/overlay.cpp) follows Forge's own. Upstream Forge was reviewed
+  through https://github.com/Lawrence-al/forge/commit/bbc540f4b831881f4980a4939a049cc14c31b9e4. MIT License.
 - cimgui (third_party/cimgui): MIT License.
 - Dear ImGui (third_party/cimgui/imgui): MIT License.
 

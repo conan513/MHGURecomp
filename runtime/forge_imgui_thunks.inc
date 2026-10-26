@@ -1763,26 +1763,6 @@ HLE_FUNC("ImDrawList_AddText_Vec2", ig_ImDrawList_AddText_Vec2) {
     IG_LEAVE(c);
 }
 
-HLE_FUNC("ImDrawList_AddText_FontPtr", ig_ImDrawList_AddText_FontPtr) {
-    uint32_t a0 = c->r[0];
-    uint32_t a1 = c->r[1];
-    float a2 = ig_f(c->r[2]);
-    uint32_t a4 = STK(1);
-    uint32_t a5 = STK(2);
-    uint32_t a6 = STK(3);
-    float a7 = ig_f(STK(4));
-    uint32_t a8 = STK(5);
-    IG_ENTER(c);
-    void *ha0 = m_in(a0, 7);
-    void *ha1 = m_in(a1, 11);
-    void *ha8 = m_in(a8, 119);
-    ImDrawList_AddText_FontPtr(ha0, ha1, a2, (ImVec2_c){ig_f(c->r[3]), ig_f(STK(0))}, a4, GP(a5), GP(a6), a7, ha8);
-    m_after(a0);
-    m_after(a1);
-    m_after(a8);
-    IG_LEAVE(c);
-}
-
 HLE_FUNC("ImDrawList_AddTriangle", ig_ImDrawList_AddTriangle) {
     uint32_t a0 = c->r[0];
     uint32_t a4 = STK(3);
@@ -2344,22 +2324,6 @@ HLE_FUNC("ImFontAtlas_AddFontDefaultVector", ig_ImFontAtlas_AddFontDefaultVector
     c->r[0] = m_out(r_, 11);
 }
 
-HLE_FUNC("ImFontAtlas_AddFontFromFileTTF", ig_ImFontAtlas_AddFontFromFileTTF) {
-    uint32_t a0 = c->r[0];
-    uint32_t a1 = c->r[1];
-    float a2 = ig_f(c->r[2]);
-    uint32_t a3 = c->r[3];
-    uint32_t a4 = STK(0);
-    IG_ENTER(c);
-    void *ha0 = m_in(a0, 12);
-    void *ha3 = m_in(a3, 18);
-    __auto_type r_ = ImFontAtlas_AddFontFromFileTTF(ha0, GP(a1), a2, ha3, GP(a4));
-    m_after(a0);
-    m_after(a3);
-    IG_LEAVE(c);
-    c->r[0] = m_out(r_, 11);
-}
-
 HLE_FUNC("ImFontAtlas_AddFontFromMemoryCompressedBase85TTF", ig_ImFontAtlas_AddFontFromMemoryCompressedBase85TTF) {
     uint32_t a0 = c->r[0];
     uint32_t a1 = c->r[1];
@@ -2369,7 +2333,8 @@ HLE_FUNC("ImFontAtlas_AddFontFromMemoryCompressedBase85TTF", ig_ImFontAtlas_AddF
     IG_ENTER(c);
     void *ha0 = m_in(a0, 12);
     void *ha3 = m_in(a3, 18);
-    __auto_type r_ = ImFontAtlas_AddFontFromMemoryCompressedBase85TTF(ha0, GP(a1), a2, ha3, GP(a4));
+    const ImWchar *ha4 = a4 ? GP(a4) : forge_font_glyph_ranges;
+    __auto_type r_ = ImFontAtlas_AddFontFromMemoryCompressedBase85TTF(ha0, GP(a1), a2, ha3, ha4);
     m_after(a0);
     m_after(a3);
     IG_LEAVE(c);
@@ -2386,7 +2351,8 @@ HLE_FUNC("ImFontAtlas_AddFontFromMemoryCompressedTTF", ig_ImFontAtlas_AddFontFro
     IG_ENTER(c);
     void *ha0 = m_in(a0, 12);
     void *ha4 = m_in(a4, 18);
-    __auto_type r_ = ImFontAtlas_AddFontFromMemoryCompressedTTF(ha0, GP(a1), a2, a3, ha4, GP(a5));
+    const ImWchar *ha5 = a5 ? GP(a5) : forge_font_glyph_ranges;
+    __auto_type r_ = ImFontAtlas_AddFontFromMemoryCompressedTTF(ha0, GP(a1), a2, a3, ha4, ha5);
     m_after(a0);
     m_after(a4);
     IG_LEAVE(c);
@@ -2403,7 +2369,8 @@ HLE_FUNC("ImFontAtlas_AddFontFromMemoryTTF", ig_ImFontAtlas_AddFontFromMemoryTTF
     IG_ENTER(c);
     void *ha0 = m_in(a0, 12);
     void *ha4 = m_in(a4, 18);
-    __auto_type r_ = ImFontAtlas_AddFontFromMemoryTTF(ha0, GP(a1), a2, a3, ha4, GP(a5));
+    const ImWchar *ha5 = a5 ? GP(a5) : forge_font_glyph_ranges;
+    __auto_type r_ = ImFontAtlas_AddFontFromMemoryTTF(ha0, GP(a1), a2, a3, ha4, ha5);
     m_after(a0);
     m_after(a4);
     IG_LEAVE(c);
@@ -2467,16 +2434,6 @@ HLE_FUNC("ImFontAtlas_GetCustomRect", ig_ImFontAtlas_GetCustomRect) {
     m_after(a2);
     IG_LEAVE(c);
     c->r[0] = r_ != 0;
-}
-
-HLE_FUNC("ImFontAtlas_GetGlyphRangesDefault", ig_ImFontAtlas_GetGlyphRangesDefault) {
-    uint32_t a0 = c->r[0];
-    IG_ENTER(c);
-    void *ha0 = m_in(a0, 12);
-    __auto_type r_ = ImFontAtlas_GetGlyphRangesDefault(ha0);
-    m_after(a0);
-    IG_LEAVE(c);
-    c->r[0] = h2g(r_);
 }
 
 HLE_FUNC("ImFontAtlas_ImFontAtlas", ig_ImFontAtlas_ImFontAtlas) {
@@ -14679,7 +14636,7 @@ HLE_FUNC("igWindowRectRelToAbs", ig_igWindowRectRelToAbs) {
     c->r[0] = ret_;
 }
 
-// 1440 functions; not provided (36):
+// 1437 functions; not provided (35):
 //   ImDrawList_AddCallback (callback ImDrawCallback)
 //   ImDrawList_AddImage (argument ImTextureRef)
 //   ImDrawList_AddImageQuad (argument ImTextureRef)
@@ -14687,7 +14644,6 @@ HLE_FUNC("igWindowRectRelToAbs", ig_igWindowRectRelToAbs) {
 //   ImDrawList_PushTexture (argument ImTextureRef)
 //   ImDrawList__SetTexture (argument ImTextureRef)
 //   ImFontGlyphRangesBuilder_BuildRanges (argument ImVector_ImWchar*)
-//   ImFont_CalcTextSizeA (argument const char**)
 //   ImGuiSelectionBasicStorage_GetNextSelectedItem (argument void**)
 //   ImGuiStorage_GetVoidPtrRef (returns void**)
 //   ImGuiTextRange_split (argument ImVector_ImGuiTextRange*)

@@ -1,5 +1,6 @@
-// Forge plugins (Forge: an MHGU mod loader for code mods, github.com/Fexty12573/forge). A plugin is an AArch32 .nro in
-// the RomFS folder nativeNX/plugins/ (so it comes with a mod's romfs, runtime/mods.c); on the console Forge's own
+// Forge plugins (Forge: an MHGU mod loader for code mods, github.com/Lawrence-al/forge; upstream reviewed through
+// bbc540f4b831881f4980a4939a049cc14c31b9e4). A plugin is an AArch32 .nro in the RomFS folder nativeNX/plugins/
+// (so it comes with a mod's romfs, runtime/mods.c); on the console Forge's own
 // module (exefs subsdk) loads it and gives it an API: function hooks, code patches, the game's singletons, save data,
 // logging, input, an ImGui overlay. The port does not need Forge's module (its hooks rewrite the console's code): it
 // loads the plugins itself, runs their code with the interpreter (runtime/interp.c, the plugins call into the
@@ -11,7 +12,8 @@
 // Hooks run through FN_ENTER (cpu.h, dispatch.c). Patches over data apply as written; a patch over code can only
 // redirect a function entry (Forge's own hook form, `ldr pc, [pc, #-4]` + address, or a `b`): others are logged.
 // The plugins' ImGui calls (cimgui's ig* / Im*): runtime/forge_imgui.c. Not provided: forge_socket_*.
-// Plugins that leave out a required Forge version newer than this one (FORGE_MAJOR.FORGE_MINOR) are not started.
+// This host-side API implementation is compatible through Forge 1.5.1. Plugins that require a newer major/minor
+// version are not started.
 #include <ctype.h>
 #include <dirent.h>
 #include <stdarg.h>
@@ -27,6 +29,7 @@
 #include "interp.h"
 #include "mods.h"
 #include "overlay.h"
+#include "rt.h"
 
 #define FORGE_MAJOR 1
 #define FORGE_MINOR 5
@@ -580,10 +583,11 @@ static void frame_update(Cpu *c) {
 
 // a path under dir, matched without regard to case (mods come from every kind of system); false if missing
 static bool ci_path(const char *dir, const char *rel, char *out, size_t n) {
-    snprintf(out, n, "%s", dir);
+    if (snprintf(out, n, "%s", dir) >= (int)n) return false;
     char part[256];
     while (*rel) {
         size_t k = strcspn(rel, "/");
+        if (!k || k >= sizeof part) return false;
         snprintf(part, sizeof part, "%.*s", (int)k, rel);
         rel += k + (rel[k] == '/');
         DIR *d = opendir(out);
@@ -593,14 +597,74 @@ static bool ci_path(const char *dir, const char *rel, char *out, size_t n) {
         while ((e = readdir(d)))
             if (!strcasecmp(e->d_name, part)) {
                 size_t len = strlen(out);
-                snprintf(out + len, n - len, "/%s", e->d_name);
-                found = true;
+                found = snprintf(out + len, n - len, "/%s", e->d_name) < (int)(n - len);
                 break;
             }
         closedir(d);
         if (!found) return false;
     }
     return true;
+}
+
+bool forge_resolve_romfs_path(const char *path, char *out, size_t n) {
+    if (!path || !*path || !out || !n) return false;
+
+    FILE *f = fopen(path, "rb");
+    if (f) {
+        fclose(f);
+        return snprintf(out, n, "%s", path) < (int)n;
+    }
+
+    const char *rel = path;
+    if (!strncasecmp(rel, "app:/", 5))
+        rel += 5;
+    else if (!strncasecmp(rel, "romfs:/", 7))
+        rel += 7;
+    else if (!strncasecmp(rel, "rom:/", 5))
+        rel += 5;
+    else if (strchr(rel, ':'))
+        return false;
+
+    char normalized[1024];
+    size_t used = 0;
+    while (*rel == '/' || *rel == '\\') rel++;
+    while (*rel) {
+        while (*rel == '/' || *rel == '\\') rel++;
+        const char *end = rel;
+        while (*end && *end != '/' && *end != '\\') end++;
+        size_t len = (size_t)(end - rel);
+        if (!len) break;
+        if (len == 2 && rel[0] == '.' && rel[1] == '.') return false;
+        if (len != 1 || rel[0] != '.') {
+            if (used && used + 1 >= sizeof normalized) return false;
+            if (used) normalized[used++] = '/';
+            if (len >= sizeof normalized - used) return false;
+            memcpy(normalized + used, rel, len);
+            used += len;
+        }
+        rel = end;
+    }
+    if (!used) return false;
+    normalized[used] = 0;
+
+    char base[1024];
+    if (snprintf(base, sizeof base, "%s/romfs", g_game_dir) >= (int)sizeof base) return false;
+    const char *layers[65] = {base};
+    int count = 1 + mods_romfs_layers(layers + 1, 64);
+    bool found = false;
+    char candidate[1400];
+    for (int i = count - 1; i >= 0; i--) {
+        if (ci_path(layers[i], normalized, candidate, sizeof candidate)) {
+            f = fopen(candidate, "rb");
+            if (f) {
+                fclose(f);
+                found = snprintf(out, n, "%s", candidate) < (int)n;
+                break;
+            }
+        }
+    }
+    for (int i = 1; i < count; i++) free((void *)layers[i]);
+    return found;
 }
 
 static uint8_t *read_all(const char *path, size_t *len) {

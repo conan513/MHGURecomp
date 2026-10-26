@@ -1,4 +1,4 @@
-# MHGU Recomp
+h# MHGU Recomp
 
 A native PC port of **Monster Hunter Generations Ultimate** (Nintendo Switch, version 1.4.0), made by statically
 recompiling the game's 32-bit ARM code to C and running it on a host runtime: Switch system services and the NVN
@@ -177,10 +177,15 @@ To install a mod, put the mod folder in `mods\`. Remove the folder to uninstall 
   `atmosphere\contents\0100770008DD8000\romfs` layout.
 - exefs patches (`.pchtxt`, `.ips`) are applied when they change data. Patches to game code can't be applied, because
   the code is precompiled; the log lists them.
-- Forge plugins (`.nro` in `romfs\nativeNX\plugins\`) are loaded. Forge's menu with the plugins' settings opens with
-  Insert (or the key in Forge's own `config.ini`, if a mod includes Forge's files); use the mouse, keyboard or
-  controller in it. While it is open the game gets no controller input. Window positions are kept in
-  `forge_imgui.ini`.
+- Forge plugins (`.nro` in `romfs\nativeNX\plugins\`) are loaded by the runtime as 32-bit ARM modules; Forge's API
+  and ImGui calls are adapted to the recompiled game and this port's overlay, not run through Forge's Switch module.
+  ImGui font paths in the game/mod RomFS are resolved on the host. The host adapter supports Forge 1.5.1; its
+  socket API is not implemented. The default Roboto atlas includes its extended Latin, Greek, Cyrillic and symbol
+  glyphs, but not CJK/Japanese characters. The FF14 Damage Text plugin's move-name font is separated from the
+  damage number with a vertical rule. Forge's menu with the plugins' settings opens with Insert (or the key in Forge's
+  own `config.ini`, if a mod includes Forge's files);
+  use the mouse, keyboard or controller in it. While it is open the game gets no controller input. Window
+  positions are kept in `forge_imgui.ini`.
 - You do not need any resolution, FPS cap or connection fix mods. These features are included with this port.
 
 If you are newer to the game, I very strongly recommend the [Key Quest Markers](https://gamebanana.com/mods/727960) mod by PurplefinNeptuna. This marks out the Village and Hub quests you need to complete for the next tier directly in the quest menu, which means you no longer need a wiki to play the damn game.

@@ -32,7 +32,8 @@ STRUCTS, ENUMS, ENUMTYPES, LOC = SE['structs'], SE['enums'], SE['enumtypes'], SE
 
 # hand-written in runtime/forge_imgui.c (contexts, allocators, the frame itself)
 OVERRIDE = {'igCreateContext', 'igDestroyContext', 'igSetAllocatorFunctions', 'igGetAllocatorFunctions', 'igMemAlloc',
-            'igMemFree', 'igNewFrame', 'igEndFrame', 'igRender', 'igGetDrawData'}
+            'igMemFree', 'igNewFrame', 'igEndFrame', 'igRender', 'igGetDrawData', 'ImFont_CalcTextSizeA',
+            'ImFontAtlas_GetGlyphRangesDefault', 'ImFontAtlas_AddFontFromFileTTF', 'ImDrawList_AddText_FontPtr'}
 # structs whose mirrors are refreshed around every call (the plugin reads and writes them at any time)
 HOT = {'ImGuiIO', 'ImGuiStyle', 'ImGuiPlatformIO'}
 # callbacks run through trampolines in runtime/forge_imgui.c (type as cimgui writes it -> trampoline)
@@ -384,6 +385,12 @@ def gen(o):
                 conv.append('void *h%s = m_in(%s, %d);' % (nm, nm, TID[tgt[1]]))
                 post.append('m_after(%s);' % nm)
                 call.append('h' + nm)
+            elif sym == 'ImFontAtlas_AddFontFromFileTTF' and i == 1:
+                conv.append('const char *h%s = ig_font_path(%s);' % (nm, nm))
+                call.append('h' + nm)
+            elif a['name'] == 'glyph_ranges':
+                conv.append('const ImWchar *h%s = %s ? GP(%s) : forge_font_glyph_ranges;' % (nm, nm, nm))
+                call.append('h' + nm)
             elif tgt[0] == 'ptr' and tgt[1][0] == 'scalar' and tgt[1][1] == 'char' and 'const char* const' in a['type']:
                 cnt = next((x['name'] for x in args if x['name'] == 'items_count'), None)
                 if not cnt:
@@ -439,6 +446,8 @@ def gen(o):
         wrapper = 'static %s %s(%s, ...) { va_list ap; va_start(ap, %s); %s }\n' % (ret, fn, ps, names[-1], body)
     # the call and its result
     callx = '%s(%s)' % (fn, ', '.join(call))
+    if sym == 'ImFontAtlas_AddFontFromFileTTF':
+        callx = '(ha1 ? %s : NULL)' % callx
     lines = ['IG_ENTER(c);'] if not memret else ['uint32_t ret_ = c->r[0];', 'IG_ENTER(c);']
     lines = pre + lines + conv
     k = rt[0]
