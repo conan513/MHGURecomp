@@ -735,6 +735,7 @@ static float uf11(uint32_t v, int mbits) {  // unsigned small float: 5-bit expon
 // (the pass's own colour target 0: st.rt already names the next pass's targets when this one ends)
 static NvnTexture *dump_tex, *dump_depth;
 static NvnTexture *present_depth;
+static uint64_t present_depth_area;
 static uint32_t dump_lv, dump_ly;
 
 static void dump_pass(void) {
@@ -2746,7 +2747,10 @@ static void draw(CmdRec *r, bool indexed) {
     }
     if (!use_index) vkCmdDraw(cb, count, inst, first, base_inst);
     else vkCmdDrawIndexed(cb, icount, inst, 0, base_vertex, base_inst);
-    if (k.depth_write && st.rt.depth && st.rt.ncolor && st.rt.color[0]) present_depth = st.rt.depth;
+    if (k.depth_write && st.rt.depth && st.rt.ncolor && st.rt.color[0]) {
+        uint64_t area = (uint64_t)st.rt.depth->width * st.rt.depth->height;
+        if (area >= present_depth_area) present_depth = st.rt.depth, present_depth_area = area;
+    }
     stat_draws++;
 }
 
@@ -2913,6 +2917,7 @@ static VkDescriptorSetLayout present_set_layout;
 VkImageView vk_present_depth(uint32_t *width, uint32_t *height) {
     NvnTexture *t = present_depth;
     present_depth = NULL;
+    present_depth_area = 0;
     if (!g_config.ssao || !t || !t->backend) return VK_NULL_HANDLE;
     TexBackend *b = t->backend;
     if (!(b->aspect & VK_IMAGE_ASPECT_DEPTH_BIT) || !b->width || !b->height) return VK_NULL_HANDLE;
@@ -2925,7 +2930,7 @@ VkImageView vk_present_depth(uint32_t *width, uint32_t *height) {
 }
 
 void vk_present_depth_forget(NvnTexture *t) {
-    if (present_depth == t) present_depth = NULL;
+    if (present_depth == t) present_depth = NULL, present_depth_area = 0;
 }
 
 static VkPipeline present_pipeline(void) {
@@ -2987,7 +2992,7 @@ void vk_present_draw(VkCommandBuffer cb, TexBackend *b, VkImageView depth, float
     VkDescriptorSet ds = vk_alloc_set(present_set_layout);
     VkDescriptorImageInfo ii[2] = {
         {vk_default_sampler(true), raw_view(b), VK_IMAGE_LAYOUT_GENERAL},
-        {vk_default_sampler(false), depth ? depth : vk_dummy_view(TEXTYPE_2D), VK_IMAGE_LAYOUT_GENERAL}};
+        {vk_default_sampler(true), depth ? depth : vk_dummy_view(TEXTYPE_2D), VK_IMAGE_LAYOUT_GENERAL}};
     VkWriteDescriptorSet w[2] = {
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = ds, .dstBinding = 0, .descriptorCount = 1,
          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &ii[0]},
