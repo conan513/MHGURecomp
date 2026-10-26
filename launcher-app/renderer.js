@@ -52,7 +52,6 @@ const controlIslands = [
         title: 'D-pad',
         fields: keyboardBindings.slice(0, 8).map(([id]) => id),
       },
-      backgroundInput: { label: 'Controller works in background', kind: 'toggle', help: 'Keep controller input active while another window is focused.' },
       {
         title: 'Buttons',
         fields: keyboardBindings.slice(8, 24).map(([id]) => id),
@@ -97,6 +96,11 @@ const fieldInfo = {
       { label: 'Match printed labels', value: 'Label' },
     ],
     help: 'Switch layout: the bottom button acts as B and the right button as A, whatever is printed on them. Match printed labels: an Xbox A button acts as A.',
+  },
+  backgroundInput: {
+    label: 'Controller works in background',
+    kind: 'toggle',
+    help: 'Keep controller input active while another window is focused.',
   },
   mouseSensitivity: { label: 'Mouse sensitivity', kind: 'number', min: 0.1, max: 10, step: 0.1 },
   mouseButton: {
