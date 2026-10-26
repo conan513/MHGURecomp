@@ -249,6 +249,10 @@ make gen GAME=/c/path/to/game      # translate the game code to C in generated/ 
 make -j4 GAME=/c/path/to/game      # compile everything into build/
 ```
 
+`make gen` is required before the full build: it creates the game sources used to build `mhgugame.dll`. The game code
+is not included in the repository. If you only want to build the runtime without your game files, use
+`make -j4 build/mhgurecomp.exe bundle SKIP_GAMELIB=1`.
+
 The first full build takes a while (about 8 minutes on a 4-core Haswell with `-j4`; more cores: higher `-j`). Later
 builds only recompile what changed.
 

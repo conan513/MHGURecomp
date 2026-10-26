@@ -74,10 +74,40 @@ const categoryFields = {
 
 const fieldInfo = {
   mode: { label: 'Display mode', kind: 'select', options: ['Borderless', 'Fullscreen', 'Windowed'], help: 'Choose how the game occupies your display.' },
-  resolution: { label: 'Display resolution', kind: 'resolution', help: 'Use Desktop or enter a width x height, such as 1920x1080.' },
-  renderResolution: { label: '3D render resolution', kind: 'renderResolution', help: 'Auto picks the largest 16:9 resolution that fits your display.' },
-  aspectRatio: { label: 'Aspect ratio', kind: 'text', help: 'Auto follows the window, or enter a ratio such as 21:9 (0.5–10).' },
-  fov: { label: 'Field of view', kind: 'number', min: 0.5, max: 2, step: 0.1, help: '1.0 uses the game default.' },
+  resolution: {
+    label: 'Display resolution',
+    kind: 'preset',
+    options: ['Desktop', '1280x720', '1600x900', '1920x1080', '2560x1080', '2560x1440', '3440x1440', '3840x2160', '5120x1440'],
+    customType: 'text',
+    placeholder: 'e.g. 1920x1080',
+    help: 'Choose a common display size, or select Custom to enter another WxH resolution.',
+  },
+  renderResolution: {
+    label: '3D render resolution',
+    kind: 'preset',
+    options: ['Auto', '1280x720', '1600x900', '1920x1080', '2560x1440', '3840x2160'],
+    customType: 'text',
+    placeholder: 'e.g. 1920x1080',
+    help: 'Auto picks the largest resolution that fits your display.',
+  },
+  aspectRatio: {
+    label: 'Aspect ratio',
+    kind: 'preset',
+    options: ['Auto', '16:9', '16:10', '21:9', '32:9'],
+    customType: 'text',
+    placeholder: 'e.g. 2.0 or 21:9',
+    help: 'Choose a common screen shape, or select Custom to enter another ratio.',
+  },
+  fov: {
+    label: 'Field of view',
+    kind: 'preset',
+    options: ['0.8', '0.9', '1.0', '1.1', '1.2', '1.3', '1.5', '2.0'],
+    customType: 'number',
+    min: 0.5,
+    max: 2,
+    step: 0.1,
+    help: '1.0 uses the game default.',
+  },
   uiAnchor: {
     label: 'HUD position on ultrawide',
     kind: 'select',
@@ -86,7 +116,16 @@ const fieldInfo = {
   },
   msaa: { label: 'MSAA', kind: 'select', options: ['Off', '2x', '4x', '8x'], help: 'Multisample anti-aliasing.' },
   fxaa: { label: 'FXAA', kind: 'toggle', help: 'A lightweight post-processing anti-aliasing pass.' },
-  fps: { label: 'Frame rate limit', kind: 'number', min: 30, max: 240, suffix: 'FPS' },
+  fps: {
+    label: 'Frame rate limit',
+    kind: 'preset',
+    options: ['30', '60', '75', '90', '120', '144', '165', '180', '240'],
+    customType: 'number',
+    min: 30,
+    max: 240,
+    step: 1,
+    suffix: 'FPS',
+  },
   vsync: { label: 'VSync', kind: 'toggle', help: 'Synchronize frames with your display refresh.' },
   faceButtons: {
     label: 'Face button mapping',
@@ -102,7 +141,15 @@ const fieldInfo = {
     kind: 'toggle',
     help: 'Keep controller input active while another window is focused.',
   },
-  mouseSensitivity: { label: 'Mouse sensitivity', kind: 'number', min: 0.1, max: 10, step: 0.1 },
+  mouseSensitivity: {
+    label: 'Mouse sensitivity',
+    kind: 'preset',
+    options: ['0.5', '0.75', '1.0', '1.25', '1.5', '2.0', '3.0'],
+    customType: 'number',
+    min: 0.1,
+    max: 10,
+    step: 0.1,
+  },
   mouseButton: {
     kind: 'select',
     options: [
@@ -237,6 +284,28 @@ function createField(id) {
         control.add(new Option(choice.label, choice.value));
       }
     }
+  } else if (info.kind === 'preset') {
+    control = makeElement('div', 'preset-control');
+    control.dataset.controlKind = 'preset';
+    const select = makeElement('select', 'field-control');
+    select.id = `setting-${id}`;
+    for (const choice of info.options) select.add(new Option(choice, choice));
+    select.add(new Option('Custom…', '__custom__'));
+    const custom = makeElement('input', 'field-control');
+    custom.type = info.customType;
+    custom.placeholder = info.placeholder ?? 'Enter a value';
+    if (info.min !== undefined) {
+      custom.min = String(info.min);
+      custom.max = String(info.max);
+      custom.step = String(info.step ?? 1);
+      if (info.customType === 'number') custom.inputMode = 'decimal';
+    }
+    custom.hidden = true;
+    select.addEventListener('change', () => {
+      custom.hidden = select.value !== '__custom__';
+      control.classList.toggle('custom-active', !custom.hidden);
+    });
+    control.append(select, custom);
   } else if (info.kind === 'quests') {
     control = makeElement('textarea', 'field-control');
     control.spellcheck = false;
@@ -250,22 +319,8 @@ function createField(id) {
       control.step = String(info.step ?? 1);
       control.inputMode = 'decimal';
     }
-    if (id === 'resolution' || id === 'renderResolution') {
-      control.setAttribute('list', `${id}-presets`);
-      const list = makeElement('datalist');
-      list.id = `${id}-presets`;
-      const presets = id === 'resolution'
-        ? ['Desktop', '1280x720', '1600x900', '1920x1080', '2560x1440', '3840x2160']
-        : ['Auto', '1280x720', '1920x1080', '2560x1440', '3840x2160'];
-      for (const preset of presets) {
-        const option = makeElement('option');
-        option.value = preset;
-        list.append(option);
-      }
-      label.append(list);
-    }
   }
-  control.id = `setting-${id}`;
+  if (info.kind !== 'preset') control.id = `setting-${id}`;
   control.dataset.setting = id;
   control.addEventListener('input', () => setDirty(true));
   control.addEventListener('change', () => setDirty(true));
@@ -332,7 +387,16 @@ function writeVisibleFields() {
   if (!settings) return;
   for (const control of elements['field-grid'].querySelectorAll('[data-setting]')) {
     const id = control.dataset.setting;
-    if (id === 'quests') {
+    if (control.dataset.controlKind === 'preset') {
+      const select = control.querySelector('select');
+      const custom = control.querySelector('input');
+      const value = settings[id] ?? '';
+      const hasPreset = fieldInfo[id].options.includes(value);
+      select.value = hasPreset ? value : '__custom__';
+      custom.value = hasPreset ? '' : value;
+      custom.hidden = hasPreset;
+      control.classList.toggle('custom-active', !hasPreset);
+    } else if (id === 'quests') {
       control.value = settings.quests.map(({ id: questId, value }) => `Quest${questId} = ${value}`).join('\n');
     } else if (control instanceof HTMLButtonElement) {
       control.dataset.boundKey = settings[id] ?? '';
@@ -358,9 +422,18 @@ function readVisibleFields() {
   if (!settings) return;
   for (const control of elements['field-grid'].querySelectorAll('[data-setting]')) {
     const id = control.dataset.setting;
-    settings[id] = id === 'quests'
-      ? readQuestLines(control.value)
-      : control instanceof HTMLButtonElement ? control.dataset.boundKey : control.value;
+    if (control.dataset.controlKind === 'preset') {
+      const select = control.querySelector('select');
+      settings[id] = select.value === '__custom__'
+        ? control.querySelector('input').value
+        : select.value;
+    } else if (id === 'quests') {
+      settings[id] = readQuestLines(control.value);
+    } else if (control instanceof HTMLButtonElement) {
+      settings[id] = control.dataset.boundKey;
+    } else {
+      settings[id] = control.value;
+    }
   }
 }
 

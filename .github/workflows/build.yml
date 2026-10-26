@@ -64,7 +64,7 @@ jobs:
       - name: Build mhgurecomp.exe
         shell: msys2 {0}
         run: |
-          make -j2 build/mhgurecomp.exe bundle LAUNCHER_PREBUILT=1
+          make -j2 build/mhgurecomp.exe bundle LAUNCHER_PREBUILT=1 SKIP_GAMELIB=1
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4

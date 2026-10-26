@@ -56,6 +56,11 @@ endif
 GAMELIB_SRCS := tools/gen.py tools/lifter.py tools/neon.py tools/nso.py tools/gamelib_entry.c \
                 runtime/hle/hle_symbols.txt runtime/cpu.h runtime/vfp.h runtime/neon_rt.h runtime/gamelib.h
 GAMELIB_ID := $(shell (cat $(GAMELIB_SRCS); echo '$(GENFLAGS)') | sha256sum | cut -c1-16)
+ifeq ($(SKIP_GAMELIB),1)
+GAMELIB_TARGET :=
+else
+GAMELIB_TARGET := $(GAMELIB)
+endif
 
 RT_OBJ   = $(patsubst runtime/%.c,$(O)/rt/%.o,$(RT_SRC)) $(RT_CXX) $(O)/rt/overlay.o $(IMGUI_OBJ)
 # Dear ImGui with cimgui's C API (third_party/cimgui: Forge plugins' ImGui, runtime/forge_imgui.c, overlay.cpp)
@@ -76,7 +81,7 @@ else
 RT_CXX   := $(O)/rt/nvn/vulkan/vma.o
 endif
 
-all: $(EXE) $(LAUNCHER) $(if $(GEN_SRC),$(GAMELIB)) $(if $(filter windows,$(PLATFORM)),package) data
+all: $(EXE) $(LAUNCHER) $(GAMELIB_TARGET) $(if $(filter windows,$(PLATFORM)),package) data
 
 $(O)/gen/%.o: $(GEN)/%.c runtime/cpu.h runtime/vfp.h runtime/neon_rt.h
 	@mkdir -p $(dir $@)
@@ -139,12 +144,20 @@ $(B)/WebView2Loader.dll: $(LAUNCHER)
 endif
 endif
 
+ifeq ($(SKIP_GAMELIB),1)
+else ifeq ($(strip $(GEN_SRC)),)
+$(GAMELIB): | $(EXE)
+	@echo "No generated game sources in $(GEN)/main or $(GEN)/sdk; run 'make gen GAME=<folder with exefs/ and romfs/>' first." >&2
+	@exit 1
+else
 $(GAMELIB): $(GEN_OBJ) | $(EXE)
 	@mkdir -p $(O)
 	$(CC) $(GAMELIB_LDFLAGS) -o $(O)/gamelib.tmp $^
 	mv -f $(O)/gamelib.tmp $@
+endif
 
 PY := $(firstword $(wildcard tools/venv/Scripts/python.exe) $(wildcard tools/venv/bin/python) python3)
+PY_TOOL := $(if $(filter tools/venv/%,$(PY)),../$(PY),$(PY))
 
 # The build folder is the game folder: mhgurecomp.exe starts from it on its own (runtime/main.c), with
 # - bundle (Windows): the MSYS2 DLLs it needs beside it (tools/bundle_dlls.py; not the GPU driver's vulkan-1.dll)
@@ -152,7 +165,7 @@ PY := $(firstword $(wildcard tools/venv/Scripts/python.exe) $(wildcard tools/ven
 #   allows them - no second copy on disk, and deleting them leaves $(GAME) alone - else copies).
 # Nothing else: a player copies it as a whole into their game folder (or over it: their settings, caches, mods/ and
 # log.txt are written only when the game runs). run-game.bat runs it with those in run/ (MHGU_HOME), not here.
-bundle: $(EXE) $(LAUNCHER) $(LAUNCHER_DLL) $(if $(GEN_SRC),$(GAMELIB))
+bundle: $(EXE) $(LAUNCHER) $(LAUNCHER_DLL) $(GAMELIB_TARGET)
 	@$(PY) tools/bundle_dlls.py "$$(cygpath -m "$$(dirname "$$(command -v $(CC))")")" $(B) $^
 
 ifneq ($(LAUNCHER),)
@@ -177,13 +190,13 @@ $(B)/data/.complete:
 	fi
 
 gen:
-	cd tools && ../$(PY) gen.py sdk ../$(GAME)/exefs/sdk 0x02400000 ../$(GEN)/sdk --hle ../runtime/hle/hle_symbols.txt
-	cd tools && ../$(PY) gen.py main ../$(GAME)/exefs/main 0x00200000 ../$(GEN)/main
+	cd tools && $(PY_TOOL) gen.py sdk ../$(GAME)/exefs/sdk 0x02400000 ../$(GEN)/sdk --hle ../runtime/hle/hle_symbols.txt
+	cd tools && $(PY_TOOL) gen.py main ../$(GAME)/exefs/main 0x00200000 ../$(GEN)/main
 
 # differential test of the recompiler against Unicorn (tools/test_lift.py)
 test-lift:
-	cd tools && ../$(PY) test_lift.py ../$(GAME)/exefs/main 0x00200000 --tests 6000
-	cd tools && ../$(PY) test_lift.py ../$(GAME)/exefs/sdk 0x02400000 --tests 6000
+	cd tools && $(PY_TOOL) test_lift.py ../$(GAME)/exefs/main 0x00200000 --tests 6000
+	cd tools && $(PY_TOOL) test_lift.py ../$(GAME)/exefs/sdk 0x02400000 --tests 6000
 
 runtime-objs: $(RT_OBJ)
 

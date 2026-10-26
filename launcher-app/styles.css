@@ -326,6 +326,8 @@ h1 em { color: var(--gold-bright); font-style: normal; }
   font-size: 11px;
 }
 .field-control:hover { border-color: color-mix(in srgb, var(--gold) 60%, var(--line)); }
+.preset-control { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.preset-control.custom-active { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .key-binding { text-align: left; cursor: pointer; }
 textarea.field-control { min-height: 110px; resize: vertical; padding: 9px 10px; font-family: Consolas, monospace; line-height: 1.55; }
 .hp-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
