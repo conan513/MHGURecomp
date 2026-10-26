@@ -60,7 +60,6 @@ jobs:
           cargo build --manifest-path src-tauri/Cargo.toml --release
           New-Item -ItemType Directory -Force build | Out-Null
           Copy-Item src-tauri/target/release/mhgu-launcher.exe build/MHGU-Launcher.exe
-          Copy-Item src-tauri/target/release/WebView2Loader.dll build/WebView2Loader.dll
 
       - name: Build mhgurecomp.exe
         shell: msys2 {0}

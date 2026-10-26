@@ -120,6 +120,7 @@ ifneq ($(LAUNCHER),)
 LAUNCHER_APP_FILES := $(wildcard launcher-app/* launcher-app/test/* backgrounds/*)
 TAURI_FILES := $(wildcard src-tauri/*.toml src-tauri/*.json src-tauri/src/*.rs src-tauri/capabilities/*.json)
 TAURI_RELEASE_DIR := src-tauri/target/release
+LAUNCHER_DLL := $(if $(filter 1,$(LAUNCHER_PREBUILT)),,$(if $(LAUNCHER),$(B)/WebView2Loader.dll))
 
 node_modules/.package-lock.json: package.json package-lock.json
 	$(NPM) ci
@@ -127,8 +128,6 @@ node_modules/.package-lock.json: package.json package-lock.json
 ifeq ($(LAUNCHER_PREBUILT),1)
 $(LAUNCHER):
 	@test -f "$@" || { echo "missing prebuilt launcher: $@" >&2; exit 1; }
-$(B)/WebView2Loader.dll:
-	@test -f "$@" || { echo "missing prebuilt WebView2Loader.dll: $@" >&2; exit 1; }
 else
 $(LAUNCHER): package.json package-lock.json $(LAUNCHER_APP_FILES) $(TAURI_FILES) src-tauri/Cargo.lock node_modules/.package-lock.json
 	@mkdir -p $(dir $@)
@@ -153,7 +152,7 @@ PY := $(firstword $(wildcard tools/venv/Scripts/python.exe) $(wildcard tools/ven
 #   allows them - no second copy on disk, and deleting them leaves $(GAME) alone - else copies).
 # Nothing else: a player copies it as a whole into their game folder (or over it: their settings, caches, mods/ and
 # log.txt are written only when the game runs). run-game.bat runs it with those in run/ (MHGU_HOME), not here.
-bundle: $(EXE) $(LAUNCHER) $(if $(LAUNCHER),$(B)/WebView2Loader.dll) $(if $(GEN_SRC),$(GAMELIB))
+bundle: $(EXE) $(LAUNCHER) $(LAUNCHER_DLL) $(if $(GEN_SRC),$(GAMELIB))
 	@$(PY) tools/bundle_dlls.py "$$(cygpath -m "$$(dirname "$$(command -v $(CC))")")" $(B) $^
 
 ifneq ($(LAUNCHER),)
