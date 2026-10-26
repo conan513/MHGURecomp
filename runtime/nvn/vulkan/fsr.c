@@ -1440,7 +1440,7 @@ static bool run_fsr(NvnTexture *h, NvnTexture *hs, NvnTexture *depth, NvnTexture
     di.outputSize = (FfxVkPortableExtent2D){ow, oh};
     di.frameTimeMilliseconds = dt;
     di.preExposure = 1.0f;
-    float n = cam->near, f = cam->far;
+    float n = cam->near_plane, f = cam->far_plane;
     if (!(n > 0.0f) || !(f > n)) n = 8.0f, f = 50000.0f;
     di.cameraNear = n, di.cameraFar = f;
     di.cameraVerticalFovRadians = cam->fovy > 0.05f && cam->fovy < 3.0f ? cam->fovy : 1.0f;

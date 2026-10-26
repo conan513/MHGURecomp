@@ -100,7 +100,7 @@ static void projection(Cpu *c) {
     memcpy(r->view, g_views[v].m, 64);
     memcpy(r->proj, m, 64);
     r->jitter[0] = jx, r->jitter[1] = jy;
-    r->far = LDF(cam + CAM_FAR), r->near = LDF(cam + CAM_NEAR);
+    r->far_plane = LDF(cam + CAM_FAR), r->near_plane = LDF(cam + CAM_NEAR);
     r->fovy = m[5] > 0 ? 2.0f * atanf(1.0f / m[5]) : 1.0f;
     r->cam = cam;
     uint64_t seq = g_seq;
@@ -114,7 +114,7 @@ static void projection(Cpu *c) {
     }
     if (g_log)
         LOG("[camjit] capture %llu at present %llu: cam %08x near %g far %g fovy %.4f jitter %+.4f %+.4f m8 %g m9 %g\n",
-            (unsigned long long)seq, (unsigned long long)g_present_count, cam, r->near, r->far, r->fovy, jx, jy,
+            (unsigned long long)seq, (unsigned long long)g_present_count, cam, r->near_plane, r->far_plane, r->fovy, jx, jy,
             LDF(out + 0x20), LDF(out + 0x24));
 }
 
@@ -146,10 +146,10 @@ void camjit_init(void) {
     const char *e = getenv("MHGU_JITTER_TEST");
     g_test = e && sscanf(e, "%f,%f", &g_test_xy[0], &g_test_xy[1]) == 2;
     g_log = getenv("MHGU_JITTER_LOG") != NULL;
-    if (!g_config.fsr && !g_test) return;
+    if (!g_config.fsr && !g_config.ssao && !g_test) return;
     g_rw = g_render_size[0], g_rh = g_render_size[1];
     fnhook_set(FN_LOOKAT, hle_register("camjit:lookat", lookat));
     fnhook_set(FN_PROJECTION, hle_register("camjit:projection", projection));
     if (g_test) LOG("[camjit] test: the 3D picture shifted by (%g, %g) render pixels (x right, y down)\n", g_test_xy[0], g_test_xy[1]);
-    else LOG("[camjit] main camera hooked (main+0x1C33C view, main+0x1C358 projection): jitter while FSR runs\n");
+    else LOG("[camjit] main camera hooked (main+0x1C33C view, main+0x1C358 projection)\n");
 }

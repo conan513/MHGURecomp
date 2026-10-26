@@ -263,9 +263,30 @@ const FIELDS: &[Field] = &[
     },
     Field {
         section: "Keyboard",
+        key: "ButtonX",
+        id: "keyButtonX",
+        default: "G",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keyboard",
+        key: "ButtonXAlt",
+        id: "keyButtonXAlt",
+        default: "H",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keyboard",
         key: "ButtonY",
         id: "keyButtonY",
         default: "E",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keyboard",
+        key: "ButtonYAlt",
+        id: "keyButtonYAlt",
+        default: "T",
         kind: FieldKind::Key,
     },
     Field {
@@ -277,9 +298,23 @@ const FIELDS: &[Field] = &[
     },
     Field {
         section: "Keyboard",
+        key: "ButtonLAlt",
+        id: "keyButtonLAlt",
+        default: "U",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keyboard",
         key: "ButtonR",
         id: "keyButtonR",
         default: "Left Shift",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keyboard",
+        key: "ButtonRAlt",
+        id: "keyButtonRAlt",
+        default: "Right Shift",
         kind: FieldKind::Key,
     },
     Field {
@@ -291,9 +326,23 @@ const FIELDS: &[Field] = &[
     },
     Field {
         section: "Keyboard",
+        key: "ButtonZLAlt",
+        id: "keyButtonZlAlt",
+        default: "Z",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keyboard",
         key: "ButtonZR",
         id: "keyButtonZr",
         default: "R",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keyboard",
+        key: "ButtonZRAlt",
+        id: "keyButtonZrAlt",
+        default: "B",
         kind: FieldKind::Key,
     },
     Field {
@@ -340,6 +389,13 @@ const FIELDS: &[Field] = &[
     },
     Field {
         section: "Keyboard",
+        key: "ButtonLeftStickAlt",
+        id: "keyButtonLeftStickAlt",
+        default: "Left Alt",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keyboard",
         key: "ButtonA",
         id: "keyButtonA",
         default: "F",
@@ -356,7 +412,14 @@ const FIELDS: &[Field] = &[
         section: "Keyboard",
         key: "ButtonRightStick",
         id: "keyButtonRightStick",
-        default: "Left Alt",
+        default: "Right Ctrl",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keyboard",
+        key: "ButtonRightStickAlt",
+        id: "keyButtonRightStickAlt",
+        default: "Right Alt",
         kind: FieldKind::Key,
     },
     Field {
@@ -1336,19 +1399,47 @@ mod tests {
     fn keyboard_bindings_are_validated_and_saved_in_keyboard_section() {
         let directory = temp_directory();
         let mut settings = default_settings();
+        settings["keyButtonX"] = json!("H");
+        settings["keyButtonXAlt"] = json!("J");
+        settings["keyButtonYAlt"] = json!("K");
+        settings["keyButtonLAlt"] = json!("M");
+        settings["keyButtonRAlt"] = json!("N");
+        settings["keyButtonZlAlt"] = json!("O");
+        settings["keyButtonZrAlt"] = json!("P");
+        settings["keyButtonLeftStickAlt"] = json!("Home");
+        settings["keyButtonRightStickAlt"] = json!("End");
         settings["keyDpadUp"] = json!("I");
         settings["keyDpadUpAlt"] = json!("Up");
         assert!(validate_settings(&settings).is_empty());
         save_settings(&directory, &settings).expect("save keyboard bindings");
 
         let output = fs::read_to_string(ini_path(&directory)).expect("read updated ini");
+        assert!(output.contains("ButtonX = H"));
+        assert!(output.contains("ButtonXAlt = J"));
+        assert!(output.contains("ButtonYAlt = K"));
+        assert!(output.contains("ButtonLAlt = M"));
+        assert!(output.contains("ButtonRAlt = N"));
+        assert!(output.contains("ButtonZLAlt = O"));
+        assert!(output.contains("ButtonZRAlt = P"));
+        assert!(output.contains("ButtonLeftStickAlt = Home"));
+        assert!(output.contains("ButtonRightStickAlt = End"));
         assert!(output.contains("[Keyboard]\nDpadUp = I\n"));
+        let loaded = read_settings(&directory).expect("reload settings");
+        assert_eq!(loaded["keyButtonX"], "H");
+        assert_eq!(loaded["keyButtonXAlt"], "J");
+        assert_eq!(loaded["keyButtonYAlt"], "K");
+        assert_eq!(loaded["keyButtonLAlt"], "M");
+        assert_eq!(loaded["keyButtonRAlt"], "N");
+        assert_eq!(loaded["keyButtonZlAlt"], "O");
+        assert_eq!(loaded["keyButtonZrAlt"], "P");
+        assert_eq!(loaded["keyButtonLeftStickAlt"], "Home");
+        assert_eq!(loaded["keyButtonRightStickAlt"], "End");
         assert_eq!(
-            read_settings(&directory).expect("reload settings")["keyDpadUp"],
+            loaded["keyDpadUp"],
             "I"
         );
         assert_eq!(
-            read_settings(&directory).expect("reload settings")["keyDpadUpAlt"],
+            loaded["keyDpadUpAlt"],
             "Up"
         );
 

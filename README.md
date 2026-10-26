@@ -100,7 +100,7 @@ Keyboard and mouse support (not recommended):
 | W A S D | left stick (hold Left Shift to walk) |
 | Mouse | right stick (camera) |
 | Mouse buttons | Configurable Switch buttons (default: left = X, right = A) |
-| Space / R | B / Y |
+| Space / G / R | B / X / Y |
 | Q / E | L / R |
 | Tab / T | ZL / ZR |
 | Enter / Backspace | A (confirm) / B (back) |
@@ -113,9 +113,9 @@ window). `MouseSensitivity` in the ini's `[Mouse]` section sets its speed; the g
 inverted axes) apply to it too.
 
 Keyboard bindings can be changed in the launcher's **Controls** settings by clicking a key field and pressing a
-replacement key. The same bindings are stored in the ini's `[Keyboard]` section (for example, `DpadUp = 1` and
-`DpadUpAlt = Up`); the alternate D-pad keys let both the number row and arrow keys work at once. Key names use SDL's
-usual names, such as `Left Shift` or `Keypad Enter`.
+replacement key. Buttons have alternate bindings (`ButtonX` / `ButtonXAlt`, for example), and the D-pad has separate
+primary and alternate keys so both the number row and arrow keys can work at once. These are stored in the ini's
+`[Keyboard]` section. Key names use SDL's usual names, such as `Left Shift` or `Keypad Enter`.
 
 Mouse button assignments can also be changed in **Controls**. The left, middle, right and two side buttons can each
 activate any Switch button or be set to `None`; the first click that captures the mouse is not sent to the game.
@@ -136,7 +136,7 @@ settings it does not manage. The ini file can still be edited manually. In short
   `AspectRatio` (Auto follows the window: 16:10 and anything wider fill it, narrower gets 16:10 with bars), `FOV`
   (1.0 = the game's), `UIAnchor` (Center keeps the HUD in the middle 16:9 on an ultrawide screen, Edges spreads it
   to the sides)
-- `[Anti-aliasing]`: `MSAA` (Off / 2x / 4x / 8x), `FXAA` (On / Off), `SSAO` (On / Off; experimental screen-space contact shadows, only when a matching depth buffer is available)
+- `[Anti-aliasing]`: `MSAA` (Off / 2x / 4x / 8x), `FXAA` (On / Off), `SSAO` (On / Off; experimental depth-aware contact shading limited by a small scene-space radius, only with matching depth and camera data)
 - `[Upscaler]`: `FSR` (On / Off), `FSRQuality` (NativeAA / Quality / Balanced / Performance / UltraPerformance), `Sharpness` (0 to 1), `ObjectMotion`, `Reactive` (0 to 1), and `AnimSurf`. FSR renders the 3D scene below output resolution and reconstructs it temporally; the HUD remains at output resolution. MSAA and FXAA are disabled while FSR is active. Some GPUs may not expose the Vulkan features FSR requires, in which case the game falls back to ordinary scaling. See [FSR implementation notes](docs/FSR-PORT.md).
 - `[Performance]`: `FPS` (30 to 240), `VSync` (On / Off; above your monitor's refresh rate, turn VSync off)
 - `[Keyboard]`: configurable keys for the keyboard's Switch buttons and stick directions

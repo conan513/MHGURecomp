@@ -26,12 +26,18 @@ const keyboardBindings = [
   ['keyDpadDown', 'D-pad down'], ['keyDpadDownAlt', 'D-pad down (alternate)'],
   ['keyDpadLeft', 'D-pad left'], ['keyDpadLeftAlt', 'D-pad left (alternate)'],
   ['keyButtonA', 'A button'], ['keyButtonAAlt', 'A button (confirm)'],
-  ['keyButtonB', 'B button'], ['keyButtonBAlt', 'B button (back)'], ['keyButtonY', 'Y button'],
-  ['keyButtonL', 'L button'], ['keyButtonR', 'R button'], ['keyButtonZl', 'ZL button'],
-  ['keyButtonZr', 'ZR button'], ['keyButtonPlus', 'Plus button'],
+  ['keyButtonB', 'B button'], ['keyButtonBAlt', 'B button (back)'],
+  ['keyButtonX', 'X button'], ['keyButtonXAlt', 'X button (alternate)'],
+  ['keyButtonY', 'Y button'], ['keyButtonYAlt', 'Y button (alternate)'],
+  ['keyButtonL', 'L button'], ['keyButtonLAlt', 'L button (alternate)'],
+  ['keyButtonR', 'R button'], ['keyButtonRAlt', 'R button (alternate)'],
+  ['keyButtonZl', 'ZL button'], ['keyButtonZlAlt', 'ZL button (alternate)'],
+  ['keyButtonZr', 'ZR button'], ['keyButtonZrAlt', 'ZR button (alternate)'],
+  ['keyButtonPlus', 'Plus button'],
   ['keyButtonPlusAlt', 'Plus button (alternate)'], ['keyButtonPlusAlt2', 'Plus button (optional)'],
   ['keyButtonMinus', 'Minus button'], ['keyButtonMinusAlt', 'Minus button (alternate)'],
-  ['keyButtonLeftStick', 'Left stick click'], ['keyButtonRightStick', 'Right stick click'],
+  ['keyButtonLeftStick', 'Left stick click'], ['keyButtonLeftStickAlt', 'Left stick click (alternate)'],
+  ['keyButtonRightStick', 'Right stick click'], ['keyButtonRightStickAlt', 'Right stick click (alternate)'],
   ['keyStickUp', 'Move up'], ['keyStickLeft', 'Move left'], ['keyStickDown', 'Move down'],
   ['keyStickRight', 'Move right'],
 ];
@@ -41,6 +47,8 @@ const mouseBindings = [
   ['mouseRightButton', 'Mouse right button'], ['mouseX1Button', 'Mouse side button X1'],
   ['mouseX2Button', 'Mouse side button X2'],
 ];
+
+const movementBindingStart = keyboardBindings.findIndex(([id]) => id === 'keyStickUp');
 
 const controlIslands = [
   { title: 'Controller', fields: ['faceButtons', 'backgroundInput'] },
@@ -54,11 +62,11 @@ const controlIslands = [
       },
       {
         title: 'Buttons',
-        fields: keyboardBindings.slice(8, 24).map(([id]) => id),
+        fields: keyboardBindings.slice(8, movementBindingStart).map(([id]) => id),
       },
       {
         title: 'Movement',
-        fields: keyboardBindings.slice(24).map(([id]) => id),
+        fields: keyboardBindings.slice(movementBindingStart).map(([id]) => id),
       },
     ],
   },
@@ -119,7 +127,7 @@ const fieldInfo = {
   },
   msaa: { label: 'MSAA', kind: 'select', options: ['Off', '2x', '4x', '8x'], help: 'Multisample anti-aliasing.' },
   fxaa: { label: 'FXAA', kind: 'toggle', help: 'A lightweight post-processing anti-aliasing pass.' },
-  ssao: { label: 'SSAO', kind: 'toggle', help: 'Experimental screen-space contact shadows. Requires a matching scene depth buffer and may reduce performance.' },
+  ssao: { label: 'SSAO', kind: 'toggle', help: 'Experimental depth-aware contact shadows with a small scene-space radius. Requires a matching scene depth buffer and main-camera data; may reduce performance.' },
   fsr: { label: 'FSR 3.1', kind: 'toggle', help: 'Temporal upscaling. Renders the 3D scene at a lower resolution and reconstructs it at the output resolution; the HUD stays full resolution. MSAA and FXAA are disabled while FSR is active.' },
   fsrQuality: { label: 'FSR quality', kind: 'select', options: ['NativeAA', 'Quality', 'Balanced', 'Performance', 'UltraPerformance'], help: 'Higher quality renders closer to the output resolution; Performance modes render faster but look softer.' },
   fsrSharpness: { label: 'FSR sharpness', kind: 'number', min: 0, max: 1, step: 0.1, help: 'Sharpening strength, from off to strongest.' },

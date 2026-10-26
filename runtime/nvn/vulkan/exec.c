@@ -20,6 +20,7 @@
 #endif
 
 #include "../../kernel.h"
+#include "../../camera_jitter.h"
 #include "fsr.h"
 #include "shaders.h"
 #include "vk.h"
@@ -3095,13 +3096,14 @@ static VkImageView raw_view(TexBackend *b) {
 }
 
 // Inside the window image's render pass (device.c): the game image into (vx, vy, vw, vh).
-void vk_present_draw(VkCommandBuffer cb, TexBackend *b, VkImageView depth, float vx, float vy, float vw, float vh) {
+void vk_present_draw(VkCommandBuffer cb, TexBackend *b, VkImageView depth, float vx, float vy, float vw, float vh,
+                     float near_plane, float far_plane) {
     if (!b || !b->image || (b->aspect & ~VK_IMAGE_ASPECT_COLOR_BIT)) return;
     VkPipeline p = present_pipeline();
     VkDescriptorSet ds = vk_alloc_set(present_set_layout);
     VkDescriptorImageInfo ii[2] = {
         {vk_default_sampler(true), raw_view(b), VK_IMAGE_LAYOUT_GENERAL},
-        {vk_default_sampler(true), depth ? depth : vk_dummy_view(TEXTYPE_2D), VK_IMAGE_LAYOUT_GENERAL}};
+        {vk_default_sampler(false), depth ? depth : vk_dummy_view(TEXTYPE_2D), VK_IMAGE_LAYOUT_GENERAL}};
     VkWriteDescriptorSet w[2] = {
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = ds, .dstBinding = 0, .descriptorCount = 1,
          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &ii[0]},
@@ -3112,7 +3114,8 @@ void vk_present_draw(VkCommandBuffer cb, TexBackend *b, VkImageView depth, float
     vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, present_layout, 0, 1, &ds, 0, NULL);
     VkViewport vp = {vx, vy, vw, vh, 0, 1};
     vkCmdSetViewport(cb, 0, 1, &vp);
-    float pv[12] = {nvn_window_origin() == 0 ? 1.0f : 0.0f, 0, 0, 0, 0, 0, 1, 1, depth && g_config.ssao ? 1.0f : 0.0f};
+    float pv[12] = {nvn_window_origin() == 0 ? 1.0f : 0.0f, 0, 0, 0, 0, 0, 1, 1,
+                    depth && g_config.ssao ? 1.0f : 0.0f, near_plane, far_plane, 50.0f};
     vkCmdPushConstants(cb, present_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof pv, pv);
     vkCmdDraw(cb, 3, 1, 0, 0);
 }

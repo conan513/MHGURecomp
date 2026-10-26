@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include "../../overlay.h"
+#include "../../camera_jitter.h"
 #include "fsr.h"
 #include "vk.h"
 
@@ -484,7 +485,8 @@ void vk_save_png(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h) 
 
 // ================================================================== presentation (nvnQueuePresentTexture)
 VkImageView vk_present_depth(uint32_t *width, uint32_t *height);  // (exec.c)
-void vk_present_draw(VkCommandBuffer cb, TexBackend *b, VkImageView depth, float vx, float vy, float vw, float vh);  // (exec.c)
+void vk_present_draw(VkCommandBuffer cb, TexBackend *b, VkImageView depth, float vx, float vy, float vw, float vh,
+                     float near_plane, float far_plane);  // (exec.c)
 
 static uint64_t g_frames;
 uint64_t vk_frame_counter(void) { return g_frames; }
@@ -512,11 +514,19 @@ void backend_present(NvnTexture *t) {
     uint32_t depth_w = 0, depth_h = 0;
     VkImageView depth = vk_present_depth(&depth_w, &depth_h);
     if (depth && (uint64_t)b->width * depth_h != (uint64_t)b->height * depth_w) depth = VK_NULL_HANDLE;
+    float near_plane = 8.0f, far_plane = 50000.0f;
+    CamRecord camera;
+    if (depth && camjit_latest(&camera) && camera.present + 1 >= g_present_count &&
+        camera.near_plane > 0.0f && camera.far_plane > camera.near_plane) {
+        near_plane = camera.near_plane;
+        far_plane = camera.far_plane;
+    }
     if (frame_begin()) {
         // the game's image, as large as fits with its aspect ratio, centred
         double ww = g_vk.sc_extent.width, wh = g_vk.sc_extent.height, s = fmin(ww / t->width, wh / t->height);
         double vw = t->width * s, vh = t->height * s;
-        vk_present_draw(vk_cmd(), b, depth, (float)((ww - vw) / 2), (float)((wh - vh) / 2), (float)vw, (float)vh);
+        vk_present_draw(vk_cmd(), b, depth, (float)((ww - vw) / 2), (float)((wh - vh) / 2), (float)vw, (float)vh,
+                        near_plane, far_plane);
         OverlayTarget ot = {g_vk.inst, g_vk.phys, g_vk.dev, g_vk.qfam, g_vk.queue, g_vk.pcache, sc_pass,
                             g_vk.sc_extent.width, g_vk.sc_extent.height};
         overlay_draw(vk_cmd(), &ot);  // (Forge plugins' ImGui overlay, over the game: runtime/overlay.cpp)

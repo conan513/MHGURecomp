@@ -49,7 +49,7 @@ static void boot(const char *root) {
     villagehub_init();  // (Village quests at the Hub / Pub counter: runtime/hle/villagehub.c)
     movelog_init();  // (debug, MHGU_LOG_MOVES: runtime/hle/movelog.c)
     quickhunt_init();  // (debug, MHGU_QUICKHUNT: runtime/hle/quickhunt.c)
-    camjit_init();  // FSR camera capture and jitter (runtime/hle/camera_jitter.c)
+    camjit_init();  // camera data for FSR jitter / motion vectors and depth-aware SSAO
     cheats_init();  // (cheat codes from cheats/: runtime/cheats.c)
 
     uint32_t stack_size = 0x100000;

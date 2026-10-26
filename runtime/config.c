@@ -50,6 +50,8 @@ Config g_config = {
         SDL_SCANCODE_LCTRL, SDL_SCANCODE_F, SDL_SCANCODE_RETURN, SDL_SCANCODE_LALT,
         SDL_SCANCODE_W, SDL_SCANCODE_A,
         SDL_SCANCODE_S, SDL_SCANCODE_D,
+        SDL_SCANCODE_G, SDL_SCANCODE_H, SDL_SCANCODE_T, SDL_SCANCODE_U,
+        SDL_SCANCODE_RSHIFT, SDL_SCANCODE_Z, SDL_SCANCODE_B, SDL_SCANCODE_LALT, SDL_SCANCODE_RCTRL,
     },
     .aspect_ratio = 0.0f,
     .fov = 1.0f,
@@ -102,8 +104,8 @@ static const char DEFAULT_INI[] =
     "; FXAA: On or Off. The game's own edge smoothing: a filter over the finished image, slightly blurry.\n"
     "FXAA = On\n"
     "\n"
-    "; SSAO: On or Off. Adds subtle screen-space contact shadows; may reduce performance or darken image edges.\n"
-    "; This is experimental and only applies when a matching scene depth buffer is available.\n"
+    "; SSAO: On or Off. Adds depth-aware screen-space contact shadows within a small scene-space radius; may reduce\n"
+    "; performance. It only runs when a matching scene depth buffer and main-camera data are available.\n"
     "SSAO = Off\n"
     "\n"
     "[Upscaler]\n"
@@ -148,7 +150,8 @@ static const char DEFAULT_INI[] =
     "\n"
     "[Keyboard]\n"
     "; Keyboard keys for Switch buttons and stick directions. The launcher can capture a key when you click a binding.\n"
-    "; D-pad defaults keep both the number keys and arrow keys. Delete clears a launcher binding; None disables it.\n"
+    "; D-pad defaults keep both the number keys and arrow keys; button Alt keys provide a second binding. Delete\n"
+    "; clears a launcher binding; None disables it.\n"
     "; Enter confirms (A), Backspace goes back (B). Key names use SDL names (e.g. Left Shift, Keypad Enter).\n"
     "DpadUp = 1\n"
     "DpadUpAlt = Up\n"
@@ -160,20 +163,29 @@ static const char DEFAULT_INI[] =
     "DpadLeftAlt = Left\n"
     "ButtonB = Space\n"
     "ButtonBAlt = Backspace\n"
+    "ButtonX = G\n"
+    "ButtonXAlt = H\n"
     "ButtonY = E\n"
+    "ButtonYAlt = T\n"
     "ButtonL = Q\n"
+    "ButtonLAlt = U\n"
     "ButtonR = Left Shift\n"
+    "ButtonRAlt = Right Shift\n"
     "ButtonZL = Tab\n"
+    "ButtonZLAlt = Z\n"
     "ButtonZR = R\n"
+    "ButtonZRAlt = B\n"
     "ButtonPlus = Keypad Enter\n"
     "ButtonPlusAlt = Escape\n"
     "ButtonPlusAlt2 = None\n"
     "ButtonMinus = C\n"
     "ButtonMinusAlt = V\n"
     "ButtonLeftStick = Left Ctrl\n"
+    "ButtonLeftStickAlt = Left Alt\n"
     "ButtonA = F\n"
     "ButtonAAlt = Return\n"
     "ButtonRightStick = Left Alt\n"
+    "ButtonRightStickAlt = Right Ctrl\n"
     "StickUp = W\n"
     "StickLeft = A\n"
     "StickDown = S\n"
@@ -334,13 +346,18 @@ static const struct {
     {"dpadright", KEY_DPAD_RIGHT}, {"dpadrightalt", KEY_DPAD_RIGHT_ALT},
     {"dpaddown", KEY_DPAD_DOWN}, {"dpaddownalt", KEY_DPAD_DOWN_ALT},
     {"dpadleft", KEY_DPAD_LEFT}, {"dpadleftalt", KEY_DPAD_LEFT_ALT},
-    {"buttonb", KEY_BUTTON_B}, {"buttonbalt", KEY_BUTTON_B_ALT}, {"buttony", KEY_BUTTON_Y},
-    {"buttonl", KEY_BUTTON_L}, {"buttonr", KEY_BUTTON_R},
-    {"buttonzl", KEY_BUTTON_ZL}, {"buttonzr", KEY_BUTTON_ZR},
+    {"buttonb", KEY_BUTTON_B}, {"buttonbalt", KEY_BUTTON_B_ALT}, {"buttonx", KEY_BUTTON_X},
+    {"buttonxalt", KEY_BUTTON_X_ALT}, {"buttony", KEY_BUTTON_Y}, {"buttonyalt", KEY_BUTTON_Y_ALT},
+    {"buttonl", KEY_BUTTON_L}, {"buttonlalt", KEY_BUTTON_L_ALT},
+    {"buttonr", KEY_BUTTON_R}, {"buttonralt", KEY_BUTTON_R_ALT},
+    {"buttonzl", KEY_BUTTON_ZL}, {"buttonzlalt", KEY_BUTTON_ZL_ALT},
+    {"buttonzr", KEY_BUTTON_ZR}, {"buttonzralt", KEY_BUTTON_ZR_ALT},
     {"buttonplus", KEY_BUTTON_PLUS}, {"buttonplusalt", KEY_BUTTON_PLUS_ALT},
     {"buttonplusalt2", KEY_BUTTON_PLUS_ALT2}, {"buttonminus", KEY_BUTTON_MINUS},
     {"buttonminusalt", KEY_BUTTON_MINUS_ALT}, {"buttonleftstick", KEY_BUTTON_LSTICK},
+    {"buttonleftstickalt", KEY_BUTTON_LSTICK_ALT},
     {"buttona", KEY_BUTTON_A}, {"buttonaalt", KEY_BUTTON_A_ALT}, {"buttonrightstick", KEY_BUTTON_RSTICK},
+    {"buttonrightstickalt", KEY_BUTTON_RSTICK_ALT},
     {"stickup", KEY_STICK_UP}, {"stickleft", KEY_STICK_LEFT},
     {"stickdown", KEY_STICK_DOWN}, {"stickright", KEY_STICK_RIGHT},
 };
