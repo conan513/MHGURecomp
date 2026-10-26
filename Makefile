@@ -124,6 +124,12 @@ TAURI_RELEASE_DIR := src-tauri/target/release
 node_modules/.package-lock.json: package.json package-lock.json
 	$(NPM) ci
 
+ifeq ($(LAUNCHER_PREBUILT),1)
+$(LAUNCHER):
+	@test -f "$@" || { echo "missing prebuilt launcher: $@" >&2; exit 1; }
+$(B)/WebView2Loader.dll:
+	@test -f "$@" || { echo "missing prebuilt WebView2Loader.dll: $@" >&2; exit 1; }
+else
 $(LAUNCHER): package.json package-lock.json $(LAUNCHER_APP_FILES) $(TAURI_FILES) src-tauri/Cargo.lock node_modules/.package-lock.json
 	@mkdir -p $(dir $@)
 	$(NPM) run build:launcher
@@ -131,6 +137,7 @@ $(LAUNCHER): package.json package-lock.json $(LAUNCHER_APP_FILES) $(TAURI_FILES)
 	cp $(TAURI_RELEASE_DIR)/mhgu-launcher.exe $@
 $(B)/WebView2Loader.dll: $(LAUNCHER)
 	cp $(TAURI_RELEASE_DIR)/WebView2Loader.dll $@
+endif
 endif
 
 $(GAMELIB): $(GEN_OBJ) | $(EXE)
