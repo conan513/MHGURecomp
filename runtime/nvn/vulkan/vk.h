@@ -129,6 +129,7 @@ bool renderer_format_has_stencil(uint32_t f);
 void renderer_mark_gpu_owned(NvnTexture *t);
 // View of t (optionally through an NVN texture view) for rendering or sampling.
 VkImageView vk_view(NvnTexture *t, const NvnTextureView *v, bool has_view, bool render, int want_textype);
+void vk_present_depth_forget(NvnTexture *t);
 VkImageView vk_image_view(TexBackend *b, VkImageViewType type, VkFormat fmt, uint32_t lv0, uint32_t nlv, uint32_t ly0,
                           uint32_t nly, VkComponentMapping sw, VkImageAspectFlags aspect);
 VkImageView vk_dummy_view(int textype);

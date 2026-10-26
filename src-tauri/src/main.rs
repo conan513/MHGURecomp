@@ -109,6 +109,13 @@ const FIELDS: &[Field] = &[
         kind: FieldKind::Toggle,
     },
     Field {
+        section: "Anti-aliasing",
+        key: "SSAO",
+        id: "ssao",
+        default: "Off",
+        kind: FieldKind::Toggle,
+    },
+    Field {
         section: "Performance",
         key: "FPS",
         id: "fps",

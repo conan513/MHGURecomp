@@ -66,7 +66,7 @@ const controlIslands = [
 
 const categoryFields = {
   display: ['mode', 'resolution', 'renderResolution', 'aspectRatio', 'fov', 'uiAnchor'],
-  graphics: ['msaa', 'fxaa', 'fps', 'vsync'],
+  graphics: ['msaa', 'fxaa', 'ssao', 'fps', 'vsync'],
   controls: [],
   multiplayer: ['port', 'join', 'syncSmallMonsters'],
   gameplay: ['villageQuestsInHub', 'hubHp', 'bonusContent', 'hp1', 'hp2', 'hp3', 'hp4', 'quests'],
@@ -116,6 +116,7 @@ const fieldInfo = {
   },
   msaa: { label: 'MSAA', kind: 'select', options: ['Off', '2x', '4x', '8x'], help: 'Multisample anti-aliasing.' },
   fxaa: { label: 'FXAA', kind: 'toggle', help: 'A lightweight post-processing anti-aliasing pass.' },
+  ssao: { label: 'SSAO', kind: 'toggle', help: 'Experimental screen-space contact shadows. Requires a matching scene depth buffer and may reduce performance.' },
   fps: {
     label: 'Frame rate limit',
     kind: 'preset',

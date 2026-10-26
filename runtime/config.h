@@ -56,6 +56,7 @@ typedef struct {
     int vsync;                // 1: present without tearing (mailbox / FIFO, at most the refresh rate), 0: immediate
     int msaa;                 // samples of the 3D scene: 1 (off), 2, 4, 8
     int fxaa;                 // the game's own FXAA pass: 1 on, 0 off
+    int ssao;                 // presentation-time screen-space ambient occlusion: 1 on, 0 off
     int face_buttons;         // FACE_*: controller face buttons by position (the Switch layout) or by their labels
     int ldn_port;             // local play: the port a hosted hub listens on (TCP; UDP for LAN search)
     char ldn_join[256];       // local play: hosts to search besides the LAN (host[:port], comma separated)

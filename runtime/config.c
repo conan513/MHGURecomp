@@ -3,6 +3,7 @@
 // deleting it resets everything; keys that are missing or not understood keep their defaults (the log says which).
 //   MHGU_CONFIG=<path>   another settings file
 //   MHGU_WINDOW=WxH      windowed at that size, MHGU_RENDER=WxH  3D resolution, MHGU_MSAA=1|2|4|8, MHGU_FXAA=0|1,
+//                        MHGU_SSAO=0|1,
 //                        MHGU_PAD_POSITIONAL=0|1 (test runs; override the file)
 #include <ctype.h>
 #include <math.h>
@@ -91,6 +92,10 @@ static const char DEFAULT_INI[] =
     "\n"
     "; FXAA: On or Off. The game's own edge smoothing: a filter over the finished image, slightly blurry.\n"
     "FXAA = On\n"
+    "\n"
+    "; SSAO: On or Off. Adds subtle screen-space contact shadows; may reduce performance or darken image edges.\n"
+    "; This is experimental and only applies when a matching scene depth buffer is available.\n"
+    "SSAO = Off\n"
     "\n"
     "[Performance]\n"
     "; Frame rate cap: 30 (the Switch version's rate) to 240. Game speed stays the same at any rate.\n"
@@ -382,6 +387,10 @@ static void set_key(const char *key, char *val, int line) {
         if (!strcmp(v, "on") || !strcmp(v, "1") || !strcmp(v, "true") || !strcmp(v, "yes")) g_config.fxaa = 1;
         else if (!strcmp(v, "off") || !strcmp(v, "0") || !strcmp(v, "false") || !strcmp(v, "no")) g_config.fxaa = 0;
         else ok = false;
+    } else if (!strcmp(k, "ssao")) {
+        if (!strcmp(v, "on") || !strcmp(v, "1") || !strcmp(v, "true") || !strcmp(v, "yes")) g_config.ssao = 1;
+        else if (!strcmp(v, "off") || !strcmp(v, "0") || !strcmp(v, "false") || !strcmp(v, "no")) g_config.ssao = 0;
+        else ok = false;
     } else if (!strcmp(k, "vsync")) {
         if (!strcmp(v, "on") || !strcmp(v, "1") || !strcmp(v, "true") || !strcmp(v, "yes")) g_config.vsync = 1;
         else if (!strcmp(v, "off") || !strcmp(v, "0") || !strcmp(v, "false") || !strcmp(v, "no")) g_config.vsync = 0;
@@ -538,6 +547,7 @@ void config_load(void) {
     if (getenv("MHGU_HIDDEN")) g_config.display_mode = DISPLAY_WINDOWED;
     if ((e = getenv("MHGU_MSAA"))) g_config.msaa = atoi(e) >= 8 ? 8 : atoi(e) >= 4 ? 4 : atoi(e) >= 2 ? 2 : 1;
     if ((e = getenv("MHGU_FXAA"))) g_config.fxaa = atoi(e) != 0;
+    if ((e = getenv("MHGU_SSAO"))) g_config.ssao = atoi(e) != 0;
     if ((e = getenv("MHGU_BACKGROUND_INPUT"))) g_config.background_input = atoi(e) != 0;
     if ((e = getenv("MHGU_PAD_POSITIONAL"))) g_config.face_buttons = atoi(e) ? FACE_POSITION : FACE_LABEL;
     if ((e = getenv("MHGU_LDN_PORT")) && atoi(e) > 0) g_config.ldn_port = atoi(e);
@@ -587,11 +597,12 @@ void config_load(void) {
     if (g_ui_size[0] < 1280) g_ui_size[0] = 1280;
 
     static const char *const modes[] = {"windowed", "fullscreen", "borderless"};
-    LOG("[config] %s: %s %dx%d, 3D %dx%d (shape %.3f, FOV x%.2f, HUD %.3f wide), %d fps, vsync %s, MSAA %dx, FXAA %s, "
+    LOG("[config] %s: %s %dx%d, 3D %dx%d (shape %.3f, FOV x%.2f, HUD %.3f wide), %d fps, vsync %s, MSAA %dx, FXAA %s, SSAO %s, "
         "face buttons by %s, controller %s in the background\n", path, modes[g_config.display_mode], g_config.width,
         g_config.height, g_config.render_w, g_config.render_h, g_render_aspect, g_fov_scale, g_ui_anchor_aspect,
         g_config.fps, g_config.vsync ? "on" : "off",
-        g_config.msaa, g_config.fxaa ? "on" : "off", g_config.face_buttons == FACE_LABEL ? "label" : "position",
+        g_config.msaa, g_config.fxaa ? "on" : "off", g_config.ssao ? "on" : "off",
+        g_config.face_buttons == FACE_LABEL ? "label" : "position",
         g_config.background_input ? "on" : "off");
     const HpScale *hp = &g_config.hp;
     LOG("[config] monster HP in Hub quests: x%.2f / %.2f / %.2f / %.2f for 1-4 hunters, %d quest(s) set apart\n",

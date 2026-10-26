@@ -246,9 +246,28 @@ static const char *builtin_src(const char *name, int *stage) {
         *stage = STAGE_FRAGMENT;
         return "#version 450\n"
                "layout(set = 0, binding = 0) uniform sampler2D t;\n"
+               "layout(set = 0, binding = 1) uniform sampler2D d;\n"
+               "layout(push_constant) uniform P { vec4 a; vec4 crop; vec4 ao; } pc;\n"
                "layout(location = 0) in vec2 uv;\n"
                "layout(location = 0) out vec4 o;\n"
-               "void main() { o = vec4(texture(t, uv).rgb, 1.0); }\n";
+               "void main() {\n"
+               "  vec3 color = texture(t, uv).rgb;\n"
+               "  if (pc.ao.x > 0.5) {\n"
+               "    float center = texture(d, uv).r;\n"
+               "    vec2 texel = 1.0 / vec2(textureSize(d, 0));\n"
+               "    vec2 dirs[8] = vec2[8](vec2(1,0), vec2(-1,0), vec2(0,1), vec2(0,-1),\n"
+               "                           vec2(0.7071,0.7071), vec2(-0.7071,0.7071),\n"
+               "                           vec2(0.7071,-0.7071), vec2(-0.7071,-0.7071));\n"
+               "    float occlusion = 0.0;\n"
+               "    for (int i = 0; i < 8; ++i) {\n"
+               "      float near_depth = texture(d, uv + dirs[i] * texel * 2.0).r;\n"
+               "      float delta = center - near_depth;\n"
+               "      occlusion += smoothstep(0.002, 0.012, delta) * (1.0 - smoothstep(0.035, 0.12, delta));\n"
+               "    }\n"
+               "    color *= 1.0 - min(occlusion * 0.035, 0.28);\n"
+               "  }\n"
+               "  o = vec4(color, 1.0);\n"
+               "}\n";
     }
     if (!strcmp(name, "clear.vert")) {
         *stage = STAGE_VERTEX;

@@ -734,6 +734,7 @@ static float uf11(uint32_t v, int mbits) {  // unsigned small float: 5-bit expon
 
 // (the pass's own colour target 0: st.rt already names the next pass's targets when this one ends)
 static NvnTexture *dump_tex, *dump_depth;
+static NvnTexture *present_depth;
 static uint32_t dump_lv, dump_ly;
 
 static void dump_pass(void) {
@@ -2745,6 +2746,7 @@ static void draw(CmdRec *r, bool indexed) {
     }
     if (!use_index) vkCmdDraw(cb, count, inst, first, base_inst);
     else vkCmdDrawIndexed(cb, icount, inst, 0, base_vertex, base_inst);
+    if (k.depth_write && st.rt.depth && st.rt.ncolor && st.rt.color[0]) present_depth = st.rt.depth;
     stat_draws++;
 }
 
@@ -2908,16 +2910,36 @@ VkRenderPass vk_window_pass(void);
 static VkPipelineLayout present_layout;
 static VkDescriptorSetLayout present_set_layout;
 
+VkImageView vk_present_depth(uint32_t *width, uint32_t *height) {
+    NvnTexture *t = present_depth;
+    present_depth = NULL;
+    if (!g_config.ssao || !t || !t->backend) return VK_NULL_HANDLE;
+    TexBackend *b = t->backend;
+    if (!(b->aspect & VK_IMAGE_ASPECT_DEPTH_BIT) || !b->width || !b->height) return VK_NULL_HANDLE;
+    vk_ms_resolve(b);
+    VkImageView view = vk_view(t, NULL, false, false, TEXTYPE_2D);
+    if (!view) return VK_NULL_HANDLE;
+    *width = b->width;
+    *height = b->height;
+    return view;
+}
+
+void vk_present_depth_forget(NvnTexture *t) {
+    if (present_depth == t) present_depth = NULL;
+}
+
 static VkPipeline present_pipeline(void) {
     static VkPipeline p;
     static VkRenderPass made_for;
     VkRenderPass rp = vk_window_pass();
     if (p && made_for == rp) return p;
     if (!present_layout) {
-        VkDescriptorSetLayoutBinding b = {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL};
-        VkDescriptorSetLayoutCreateInfo li = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 1, .pBindings = &b};
+        VkDescriptorSetLayoutBinding b[2] = {
+            {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL},
+            {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL}};
+        VkDescriptorSetLayoutCreateInfo li = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, .bindingCount = 2, .pBindings = b};
         VK_CHECK(vkCreateDescriptorSetLayout(g_vk.dev, &li, NULL, &present_set_layout));
-        VkPushConstantRange r = {VK_SHADER_STAGE_VERTEX_BIT, 0, 32};
+        VkPushConstantRange r = {VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 48};
         VkPipelineLayoutCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, .setLayoutCount = 1,
                                          .pSetLayouts = &present_set_layout, .pushConstantRangeCount = 1, .pPushConstantRanges = &r};
         VK_CHECK(vkCreatePipelineLayout(g_vk.dev, &ci, NULL, &present_layout));
@@ -2959,20 +2981,25 @@ static VkImageView raw_view(TexBackend *b) {
 }
 
 // Inside the window image's render pass (device.c): the game image into (vx, vy, vw, vh).
-void vk_present_draw(VkCommandBuffer cb, TexBackend *b, float vx, float vy, float vw, float vh) {
+void vk_present_draw(VkCommandBuffer cb, TexBackend *b, VkImageView depth, float vx, float vy, float vw, float vh) {
     if (!b || !b->image || (b->aspect & ~VK_IMAGE_ASPECT_COLOR_BIT)) return;
     VkPipeline p = present_pipeline();
     VkDescriptorSet ds = vk_alloc_set(present_set_layout);
-    VkDescriptorImageInfo ii = {vk_default_sampler(true), raw_view(b), VK_IMAGE_LAYOUT_GENERAL};
-    VkWriteDescriptorSet w = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = ds, .dstBinding = 0, .descriptorCount = 1,
-                              .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &ii};
-    vkUpdateDescriptorSets(g_vk.dev, 1, &w, 0, NULL);
+    VkDescriptorImageInfo ii[2] = {
+        {vk_default_sampler(true), raw_view(b), VK_IMAGE_LAYOUT_GENERAL},
+        {vk_default_sampler(false), depth ? depth : vk_dummy_view(TEXTYPE_2D), VK_IMAGE_LAYOUT_GENERAL}};
+    VkWriteDescriptorSet w[2] = {
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = ds, .dstBinding = 0, .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &ii[0]},
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = ds, .dstBinding = 1, .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &ii[1]}};
+    vkUpdateDescriptorSets(g_vk.dev, 2, w, 0, NULL);
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, p);
     vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, present_layout, 0, 1, &ds, 0, NULL);
     VkViewport vp = {vx, vy, vw, vh, 0, 1};
     vkCmdSetViewport(cb, 0, 1, &vp);
-    float pv[8] = {nvn_window_origin() == 0 ? 1.0f : 0.0f, 0, 0, 0, 0, 0, 1, 1};  // (flip, crop origin / size)
-    vkCmdPushConstants(cb, present_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, 32, pv);
+    float pv[12] = {nvn_window_origin() == 0 ? 1.0f : 0.0f, 0, 0, 0, 0, 0, 1, 1, depth && g_config.ssao ? 1.0f : 0.0f};
+    vkCmdPushConstants(cb, present_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof pv, pv);
     vkCmdDraw(cb, 3, 1, 0, 0);
 }
 

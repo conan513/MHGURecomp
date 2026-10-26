@@ -357,6 +357,7 @@ static TexBackend *tex_backend(NvnTexture *t) {
 
 void backend_texture_destroyed(NvnTexture *t) {
     vk_lock();
+    vk_present_depth_forget(t);
     TexBackend *b = t->backend;
     if (b) {
         destroy_image(b);

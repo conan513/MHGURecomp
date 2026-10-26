@@ -6,7 +6,7 @@
 //   keys = d-pad, Ctrl = left stick click, Alt = right stick click. Keyboard bindings can be changed in [Keyboard].
 //   While the game shows a text entry (names,
 //   chat) the keyboard types instead
-//   (runtime/textinput.c). F12 saves a screenshot, F11 the next 8
+//   (runtime/textinput.c). F6 toggles SSAO, F7 cycles MSAA, F12 saves a screenshot, F11 the next 8
 //   frames (exact rendered pixels, run\shots\), F10 dumps every render pass of the next 2 frames (debug, slow), F9 toggles how colour clears are done (debug).
 // Gamepad (SDL): face buttons by position as on a Switch controller (the bottom one is B), or by their labels
 //   (settings FaceButtons, runtime/config.c; MHGU_PAD_POSITIONAL=0|1 overrides).
@@ -373,6 +373,10 @@ void host_input_event(const SDL_Event *e) {
                 g_burst_left = 8;
             } else if (e->key.scancode == SDL_SCANCODE_F10) {
                 g_dump_request = 2;  // (debug) every render pass of the next 2 frames, as "dump 2"
+            } else if (e->key.scancode == SDL_SCANCODE_F6) {
+                g_config.ssao = !g_config.ssao;
+                keys[SDL_SCANCODE_F6] = false;
+                LOG("[input] F6: SSAO %s\n", g_config.ssao ? "on" : "off");
             } else if (e->key.scancode == SDL_SCANCODE_F7) {  // MSAA off / 2x / 4x / 8x (to compare; the settings set it)
                 void vk_cycle_msaa(void);
                 vk_cycle_msaa();

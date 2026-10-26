@@ -123,7 +123,7 @@ These assignments are stored in `[Mouse]` as `LeftButton`, `MiddleButton`, `Righ
 
 When the game asks for text (names, chat), Enter confirms, Escape cancels, and Ctrl+V pastes.
 
-Other keys: Alt+Enter switches between windowed and full screen, F12 takes a screenshot, F7 cycles MSAA.
+Other keys: Alt+Enter switches between windowed and full screen, F6 toggles SSAO, F7 cycles MSAA, F12 takes a screenshot.
 
 ## Settings
 
@@ -136,7 +136,7 @@ settings it does not manage. The ini file can still be edited manually. In short
   `AspectRatio` (Auto follows the window: 16:10 and anything wider fill it, narrower gets 16:10 with bars), `FOV`
   (1.0 = the game's), `UIAnchor` (Center keeps the HUD in the middle 16:9 on an ultrawide screen, Edges spreads it
   to the sides)
-- `[Anti-aliasing]`: `MSAA` (Off / 2x / 4x / 8x), `FXAA` (On / Off)
+- `[Anti-aliasing]`: `MSAA` (Off / 2x / 4x / 8x), `FXAA` (On / Off), `SSAO` (On / Off; experimental screen-space contact shadows, only when a matching depth buffer is available)
 - `[Performance]`: `FPS` (30 to 240), `VSync` (On / Off; above your monitor's refresh rate, turn VSync off)
 - `[Keyboard]`: configurable keys for the keyboard's Switch buttons and stick directions
 - `[Controls]`: `FaceButtons` (Position / Label), `BackgroundInput` (On / Off: the controller keeps working while
