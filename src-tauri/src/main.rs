@@ -23,6 +23,7 @@ enum FieldKind {
     Toggle,
     Integer(f64, f64),
     Decimal(f64, f64),
+    AspectRatio,
     Multiplier(f64, f64),
     Key,
     Resolution,
@@ -73,6 +74,27 @@ const FIELDS: &[Field] = &[
         kind: FieldKind::RenderResolution,
     },
     Field {
+        section: "Display",
+        key: "AspectRatio",
+        id: "aspectRatio",
+        default: "Auto",
+        kind: FieldKind::AspectRatio,
+    },
+    Field {
+        section: "Display",
+        key: "FOV",
+        id: "fov",
+        default: "1.0",
+        kind: FieldKind::Decimal(0.5, 2.0),
+    },
+    Field {
+        section: "Display",
+        key: "UIAnchor",
+        id: "uiAnchor",
+        default: "Center",
+        kind: FieldKind::Select(&["Center", "21:9", "32:9", "Edges"]),
+    },
+    Field {
         section: "Anti-aliasing",
         key: "MSAA",
         id: "msaa",
@@ -106,6 +128,13 @@ const FIELDS: &[Field] = &[
         id: "faceButtons",
         default: "Position",
         kind: FieldKind::Select(&["Position", "Label"]),
+    },
+    Field {
+        section: "Controls",
+        key: "BackgroundInput",
+        id: "backgroundInput",
+        default: "On",
+        kind: FieldKind::Toggle,
     },
     Field {
         section: "Keyboard",
@@ -591,6 +620,33 @@ fn valid_number(value: &str, min: f64, max: f64) -> bool {
         .unwrap_or(false)
 }
 
+fn valid_aspect_ratio(value: &str) -> bool {
+    if value.eq_ignore_ascii_case("auto") {
+        return true;
+    }
+    let ratio = if let Some((width, height)) = value
+        .split_once(':')
+        .or_else(|| value.split_once('/'))
+    {
+        let (Ok(width), Ok(height)) = (
+            width.trim().parse::<f64>(),
+            height.trim().parse::<f64>(),
+        ) else {
+            return false;
+        };
+        if width <= 0.0 || height <= 0.0 {
+            return false;
+        }
+        width / height
+    } else {
+        let Ok(ratio) = value.parse::<f64>() else {
+            return false;
+        };
+        ratio
+    };
+    ratio.is_finite() && (0.5..=10.0).contains(&ratio)
+}
+
 fn valid_keyboard_key(value: &str) -> bool {
     if value.eq_ignore_ascii_case("none") {
         return true;
@@ -693,6 +749,8 @@ fn validate_settings(settings: &Value) -> HashMap<String, String> {
                 (!valid_number(value, min, max))
                     .then(|| format!("{} must be between {} and {}.", field.key, min, max))
             }
+            FieldKind::AspectRatio => (!valid_aspect_ratio(value))
+                .then(|| "AspectRatio must be Auto or a ratio from 0.5 to 10.".to_string()),
             FieldKind::Key => (!valid_keyboard_key(value))
                 .then(|| format!("{} must be a supported keyboard key.", field.key)),
             FieldKind::Resolution | FieldKind::RenderResolution => {
@@ -1153,6 +1211,35 @@ mod tests {
             { "id": 456, "value": "1, 1.2, 1.5, 2.0" }
         ]);
         assert!(validate_settings(&settings).is_empty());
+    }
+
+    #[test]
+    fn display_and_background_options_round_trip() {
+        let directory = temp_directory();
+        let mut settings = default_settings();
+        settings["aspectRatio"] = json!("21:9");
+        settings["fov"] = json!("1.2");
+        settings["uiAnchor"] = json!("Edges");
+        settings["backgroundInput"] = json!("Off");
+        assert!(validate_settings(&settings).is_empty());
+        save_settings(&directory, &settings).expect("save display settings");
+
+        let output = fs::read_to_string(ini_path(&directory)).expect("read updated ini");
+        assert!(output.contains("AspectRatio = 21:9"));
+        assert!(output.contains("FOV = 1.2"));
+        assert!(output.contains("UIAnchor = Edges"));
+        assert!(output.contains("BackgroundInput = Off"));
+        let loaded = read_settings(&directory).expect("reload settings");
+        assert_eq!(loaded["aspectRatio"], "21:9");
+        assert_eq!(loaded["fov"], "1.2");
+        assert_eq!(loaded["uiAnchor"], "Edges");
+        assert_eq!(loaded["backgroundInput"], "Off");
+
+        settings["aspectRatio"] = json!("21:0");
+        assert!(validate_settings(&settings).contains_key("aspectRatio"));
+        settings["aspectRatio"] = json!("0");
+        assert!(validate_settings(&settings).contains_key("aspectRatio"));
+        fs::remove_dir_all(directory).expect("clean temp directory");
     }
 
     #[test]

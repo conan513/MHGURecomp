@@ -207,9 +207,18 @@ User words (fixed 2026-10-24): the game hands the keyboard the character's earli
 released-user-word-info callback before Appear, giving up after 0x38e frames (~15 s: a dimmed screen, no box, and
 Edit Name dead until a restart). The callback was never called, so item set names (and any entry with user words)
 failed for characters with entries typed on a Switch; characters made in the port have none and went straight to
-Appear. Now Calc calls it right after Set/UnsetUserWordInfo. Red herrings on the way: the same dialog loads
+Appear. Now Calc calls it right after SetUserWordInfo. Red herrings on the way: the same dialog loads
 nativeNX/arc/swkbd_eu.arc (not in the game's RomFS on a Switch either: "path not found", harmless), and the bug
 looked Linux-only (it is per character: the Linux tester and the test save had Switch-made characters).
+
+Hidden entry lock-up (fixed 2026-10-26): the 10-24 fix also called the released callback after UnsetUserWordInfo,
+which the game's keyboard manager calls after every entry (state 9). The callback (f_a63d00) sets state 6, "words
+back: show the keyboard", so every entry reopened 4 frames after it closed, with nothing on screen: the keys typed
+into it instead of moving the menu (character creation right after the name), the manager stayed busy, and Escape
+only closed it for it to reopen (the players' logs: "inline keyboard shown" again right after each "entered" /
+"cancelled"). Unset releases nothing now (the words went back right after Set). Manager states (+0x2ec8 of the
+keyboard object, f_a62570): 2/4 open (4: Set the user words -> 5 waits for the callback), 6 show (f_a62d88: input
+text, cursor, Appear) -> 7 -> 8 shown until Calc returns 1 -> 9 (Unset) -> 3 ready; 10-12 finalize and re-initialize.
 
 ## Monster HP by the number of hunters (2026-10-21)
 
@@ -297,6 +306,14 @@ with a bowgun and Pierce ammo, the same shots into a still monster at 60 and at 
 the damage function, or the damage numbers); the shell data (shell\pl\pl_w<weapon>_<n>\..._hit<n> files,
 rBowgunShellData) would show which field holds the interval. A fix would scale that counter by the step.
 
+Monster AI and the frame rate (2026-10-25): measured, no difference. f_276154(monster, group, index, flag) starts an
+enemy's new action (stores it at monster +0x73e0, sends it to the other players) for small and large monsters alike;
+testsave/ai_rate.sh counts its calls per monster with MHGU_FNTRACE over 120 s of the hunter standing still. Quest 201
+zone 1 (three Larinoth): 52 / 52 / 51 actions at 30 / 60 / 120 fps, 17 / 18 / 17 per monster each time (the AI's
+timers run on the step, not per update). Quest 305 (two Great Maccao plus small monsters, all over the map): 340 and
+311 at 30 fps, 270 and 313 at 120 fps (the Maccao 70-87 each in every run): noise, nothing rising with the frame
+rate. Not measured: what happens inside an action (turning toward a target, collision, hit cooldowns per update).
+
 ## Fidelity audit (2026-10-20)
 
 Silent-bug sweep after the shimmer and shadow fixes (the two classes found: a driver needing explicit barriers, and a
@@ -343,6 +360,43 @@ Known gaps that remain:
    memory if some effect needs it.
 3. A README with build instructions; Linux platform layer (runtime/platform/linux.c). It must also give
    plat_user_dir a home for save data: $XDG_DATA_HOME/MHGURecomp, else ~/.local/share/MHGURecomp (see "Save data").
+4. Internet hubs without port forwarding (friends by code, public list) through our own relay / lobby server, and a
+   security audit of the network code before strangers can join: plan in docs/research/internet-hubs.md.
+5. Android build (arm64, controller only, no touch controls): plan in docs/research/android.md.
+6. Configurable draw distance (ini). In Bherna Village NPCs vanish a few steps away, as on the Switch; in hunts
+   monsters show across the zone (they must), so start with the towns. Find what culls them: an NPC / object
+   distance or LOD constant (code, or a table in resident.arc / the stage's arcs) read per frame - fnnew around
+   walking away from an NPC, then the compare against the distance. Also check gathering spots and other map
+   objects (do they pop in late?). Watch the cost: more NPCs drawn, and the game may cap how many it updates.
+7. A settings launcher for players who don't edit ini files: every [section] / key of runtime/config.c (it already
+   knows the names, defaults, ranges and comments) in a window, saved to mhgurecomp.ini. Cheapest: inside the exe
+   with the ImGui the port already ships (a `--settings` switch, or a "Settings" shortcut), so no second program or
+   toolkit; the same panel can serve item 8 and Android's controller-only settings (docs/research/android.md).
+8. Look into the port's options in the game's own Options menu. The menu is the game's GUI (.gui layouts, gmd text,
+   per-item code), so adding entries means extending its item tables, text and handlers: find how the Options list
+   is built (fnnew while opening it, the gmd its labels come from) and judge the effort. Fallback: the port's own
+   overlay panel (item 7) opened in game with a key / controller combination; settings that need a restart
+   (resolution, MSAA) say so.
+9. Other aspect ratios. Ultrawide is in (PR #6 by dmitsuki, 2026-10-25, then fixed up): [Display] AspectRatio
+   (Auto: the window's), FOV, UIAnchor (Center / Edges / 21:9 / 32:9). Wider than 16:9: the 3D cameras made for the
+   screen (aspect 16:9 in sCamera / uCamera +0x38) get the picture's shape (Hor+, gen.py PATCHES at the three
+   callers of the perspective matrix 0x9c617c that load it; the other 9 callers are untouched), the game's 2D
+   canvas gets the HUD's width (0xdbcd48 / 0xdbcd54), and exec.c (cbuf_info, vertex stage cbuf 3 of 2D draws)
+   unstretches the HUD and places its parts left / right / center by their layer depth (94 center banners, 96
+   dialogue box left, 97 menus by x, 100 / 105 right, 103 status left / item bar right). From 16:10 to 16:9
+   (2026-10-25): the camera keeps 16:9's width and gets more height (Vert+: config.c camera_fovy, from the
+   perspective matrix's fovy argument, radians: fovy' = 2 atan(tan(fovy / 2) * (16/9) / aspect)), and exec.c
+   flattens the HUD to its 16:9 shape (sy) and moves each layer to the top (status, minimap, menus), the bottom
+   (dialogue, item bar, Hunter Arts prompts) or the middle (banners), one anchor per layer so a window drawn in
+   pieces stays together. Narrower than 16:10 (4:3) gets 16:10 with bars. Tested 1280x720, 1280x800, 1024x768
+   (bars), 1680x720 Center, 1792x504 / 1680x840 Edges: hunt HUD, pause menu, help box, equipment windows,
+   nameplates. Left: the HUD's layout elsewhere (title, town, quest board, item box, cutscenes) unverified; at Edges
+   the Hunter Arts prompt goes right with its layer; whether an off-screen 3D view (equipment box preview, guild
+   card) uses one of the three cameras (they are left alone unless 16:9).
+10. Keyboard remapping: an ini [Keyboard] section, one line per Switch button (`A = Mouse2`, `B = Space`; SDL key
+   names, several keys per button, mouse buttons too), plus the left stick's four directions and the walk key. Today
+   the layout is fixed: key_buttons in runtime/host_input.c, WASD / Shift handled beside it. The current layout stays
+   the default, so existing ini files keep working; the settings launcher (item 7) can show it later.
 ## Build / run
 
 MSYS2 UCRT64 on PATH (`C:\msys64\ucrt64\bin;C:\msys64\usr\bin`):
@@ -427,25 +481,33 @@ ImGui plugins at once are written but not exercised by that plugin. MHGU_CONTROL
 `sdltext <text>`, `mouse <x> <y> [click]`; `mousemove <x> <y> <ms>` moves the camera as mouse look does.
 
 Cheats (runtime/cheats.c, 2026-10-24): Atmosphere-format cheat codes (as Ryujinx and a modded Switch read them) from
-every .txt in cheats\ beside mods\ (MHGU_CHEATS_DIR; '_' prefix skips a file), all on; "[Name]" starts a cheat,
-"{Name}" a master code (run first), '#' / "//" lines are comments (Atmosphere itself rejects those). The VM is written
-from Atmosphere's docs/features/cheats.md (every code type; Atmosphere is GPL, its dmnt code is not used): 16
-registers reset each run, 16 saved, 128 static; blocks / elses / loops matched when a cheat loads (a cheat that does
-not decode is logged and left out); key codes test the buttons the game sees (input_get; stick directions at half
-tilt); pause / resume (FF0 / FF1) are ignored, debug log (FFF) goes to the log. Runs once in boot() before the main
-thread starts, then on the window loop once per presented frame (as dmnt runs beside the game). Regions: main
-0x200000, heap HEAP_BASE, alias ALIAS_BASE, aslr 0x200000 (GetInfo's), 4 = absolute; kernel_mapped() checks every
-access (unmapped: reads 0, writes dropped). A write into main / sdk code that changes it: dispatch_interpret() makes
-the function holding the word (dispatch_function_at: nearest entry below, up to the next) run in the interpreter
-from then on: its range becomes interpreted and its entry gets a hook to an `ldr pc, [pc, #-4]; .word entry` stub
-in interpreted memory (an existing hook stays; fnhook_call_original then interprets). Words in the padding after
-.text (main+0x13F1DEC..0x13F2000, zeros) are made interpreted ranges themselves: room for a cheat's new code.
-Limits: a function the lifter split (a second entry inside it) has its other part still recompiled; a call already
-running finishes the old code; an interpreted function is many times slower (fine for f_2df824, called on equipment
-changes). interp.c's ranges went 16 -> 256 and merge when they touch. Tested: the skill-point cheats of
-docs/research/skill-points.md on the test save in a quest (exact), a VM test cheat (loops, registers, master
-first, C4 once per press, a bad cheat refused), the Linux build. Log: "[cheats] <file>: <n> cheat(s): ...", "[cheats] <cheat>: changes
-the code at main+<x>: the function at main+<y> runs in the interpreter now".
+every .txt in cheats\ beside mods\ (MHGU_CHEATS_DIR; '_' prefix skips a file), all on; "[Name]" starts a cheat, "{Name}"
+a master code (run first), '#' / "//" lines are comments (Atmosphere itself rejects those). The VM is written from
+Atmosphere's docs/features/cheats.md (every code type; Atmosphere is GPL, its dmnt code is not used): 16 registers and
+16 saved, both 0 at the start of every cheat (2026-10-25: before, they carried over from the cheat before it in a frame,
+so a cheat leaving r0 set shifted the next one's 0TMR writes: a player's log had the positive-only skill cheat 0x14B0
+off, its jump into read-only data: FATAL no function), 128 static (shared); blocks / elses / loops matched when a cheat
+loads (a cheat that does not decode is logged and left out); key codes test the buttons the game sees (input_get; stick
+directions at half tilt); pause / resume (FF0 / FF1) are ignored, debug log (FFF) goes to the log. Runs once in boot()
+before the main thread starts, then on the window loop once per presented frame (as dmnt runs beside the game). Regions:
+main 0x200000, heap HEAP_BASE, alias ALIAS_BASE, aslr 0x200000 (GetInfo's), 4 = absolute; kernel_mapped() checks every
+access (unmapped: reads 0, writes dropped). A write into main / sdk code that changes it: dispatch_interpret() makes the
+function holding the word (dispatch_function_at: nearest entry below, up to the next) run in the interpreter from then
+on: its range becomes interpreted and its entry gets a hook to an `ldr pc, [pc, #-4]; .word entry` stub in interpreted
+memory (an existing hook stays; fnhook_call_original then interprets). Words in the padding after .text
+(main+0x13F1DEC..0x13F2000, zeros) are made interpreted ranges themselves: room for a cheat's new code. Limits: a
+function the lifter split (a second entry inside it) has its other part still recompiled; a call already running
+finishes the old code; an interpreted function is many times slower (fine for f_2df824, called on equipment changes).
+interp.c's ranges went 16 -> 256 and merge when they touch. A function a Forge plugin hooks and a cheat changes
+(2026-10-25): Forge's hook writes `ldr pc, [pc, #-4]; detour` over the entry in guest memory, so interpreting it jumped
+back into the detour, whose original interpreted it again: a stack overflow. hook_install (and a plugin's code patch
+that makes a hook) now keeps the two words it replaced (fnhook_keep_entry) and the interpreter runs those at a hooked
+entry (code_word: only where g_fnhook has a bit). Tested both orders with MHGU_FORGE_TESTHOOK=2df824 (a plugin-style
+hook at start-up, before the cheats) and the control file's `testhook 2df824` (after them, as plugins hook): the detour
+runs, the skill table is the cheat's; without the fix, exception c00000fd. Tested: the skill-point cheats of
+docs/research/skill-points.md on the test save in a quest (exact), a VM test cheat (loops, registers, master first, C4
+once per press, a bad cheat refused), the Linux build. Log: "[cheats] <file>: <n> cheat(s): ...", "[cheats] <cheat>:
+changes the code at main+<x>: the function at main+<y> runs in the interpreter now".
 
 Skill points (docs/research/skill-points.md; extras/cheats): f_2df824 totals them, rows at [obj+0x188] (12 bytes:
 +4 activation, +6 tree, +8..+14 points per slot weapon/head/body/arms/waist/legs/talisman, +15 total, s8). "Skill
@@ -473,6 +535,9 @@ WASD left stick, mouse look (relative mode after a click, Esc releases; mouse sp
 stick tilt, offset past the camera's round ~39% stick dead zone; ini [Mouse] MouseSensitivity), clicks = X / A,
 Space / R = B / Y, Tab / T = ZL / ZR, 1-4 and arrows = d-pad, Ctrl / Alt = stick clicks, Enter = Plus; SDL gamepads, face
 buttons by position (Switch layout) or label: ini FaceButtons;
+controller also works with the window in the background, ini BackgroundInput = On (default;
+SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, set before SDL's gamepad subsystem starts, runtime/ui.c); keyboard /
+mouse only with the focus;
 F12 screenshot, F11 8-frame burst -> shots\ in the game folder; Alt+Enter windowed / full screen; F7 cycles MSAA). Display mode,
 resolution, anti-aliasing and frame rate: mhgurecomp.ini (delete it to get the defaults back).
 Game folder: where the settings, caches, mods\, bonus\, shots\ and log.txt are: the exe's folder when started on its

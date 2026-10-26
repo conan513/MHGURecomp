@@ -43,7 +43,7 @@ const mouseBindings = [
 ];
 
 const controlIslands = [
-  { title: 'Controller', fields: ['faceButtons'] },
+  { title: 'Controller', fields: ['faceButtons', 'backgroundInput'] },
   { title: 'Mouse', fields: ['mouseSensitivity', ...mouseBindings.map(([id]) => id)] },
   {
     title: 'Keyboard',
@@ -52,6 +52,7 @@ const controlIslands = [
         title: 'D-pad',
         fields: keyboardBindings.slice(0, 8).map(([id]) => id),
       },
+      backgroundInput: { label: 'Controller works in background', kind: 'toggle', help: 'Keep controller input active while another window is focused.' },
       {
         title: 'Buttons',
         fields: keyboardBindings.slice(8, 24).map(([id]) => id),
@@ -65,7 +66,7 @@ const controlIslands = [
 ];
 
 const categoryFields = {
-  display: ['mode', 'resolution', 'renderResolution'],
+  display: ['mode', 'resolution', 'renderResolution', 'aspectRatio', 'fov', 'uiAnchor'],
   graphics: ['msaa', 'fxaa', 'fps', 'vsync'],
   controls: [],
   multiplayer: ['port', 'join', 'syncSmallMonsters'],
@@ -76,6 +77,14 @@ const fieldInfo = {
   mode: { label: 'Display mode', kind: 'select', options: ['Borderless', 'Fullscreen', 'Windowed'], help: 'Choose how the game occupies your display.' },
   resolution: { label: 'Display resolution', kind: 'resolution', help: 'Use Desktop or enter a width x height, such as 1920x1080.' },
   renderResolution: { label: '3D render resolution', kind: 'renderResolution', help: 'Auto picks the largest 16:9 resolution that fits your display.' },
+  aspectRatio: { label: 'Aspect ratio', kind: 'text', help: 'Auto follows the window, or enter a ratio such as 21:9 (0.5–10).' },
+  fov: { label: 'Field of view', kind: 'number', min: 0.5, max: 2, step: 0.1, help: '1.0 uses the game default.' },
+  uiAnchor: {
+    label: 'HUD position on ultrawide',
+    kind: 'select',
+    options: ['Center', '21:9', '32:9', 'Edges'],
+    help: 'Choose how far the HUD spreads toward the sides of an ultrawide display.',
+  },
   msaa: { label: 'MSAA', kind: 'select', options: ['Off', '2x', '4x', '8x'], help: 'Multisample anti-aliasing.' },
   fxaa: { label: 'FXAA', kind: 'toggle', help: 'A lightweight post-processing anti-aliasing pass.' },
   fps: { label: 'Frame rate limit', kind: 'number', min: 30, max: 240, suffix: 'FPS' },
