@@ -743,6 +743,7 @@ static float uf11(uint32_t v, int mbits) {  // unsigned small float: 5-bit expon
 static NvnTexture *dump_tex, *dump_depth;
 static NvnTexture *present_depth;
 static uint64_t present_depth_area;
+static bool present_loading;
 static uint32_t dump_lv, dump_ly;
 
 static void dump_pass(void) {
@@ -2211,7 +2212,8 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                     sy = 1.0f;
                     // (only the strips: the lock-on markers and other effects use layer 110 too, mid-hunt, and made
                     // everything after them center-anchored, so the HUD jumped down)
-                    if (fabsf(pos_y - 168.0f) < 0.3f || fabsf(pos_y - 433.0f) < 0.3f || fabsf(pos_y - 570.0f) < 0.3f) ui_loading_pass = true;
+                    if (fabsf(pos_y - 168.0f) < 0.3f || fabsf(pos_y - 433.0f) < 0.3f || fabsf(pos_y - 570.0f) < 0.3f)
+                        ui_loading_pass = present_loading = true;
                 }
                 float anchor_aspect = g_ui_anchor_aspect;  // (config.c: 16:9 .. the screen's)
                 if (anchor_aspect > g_render_aspect) anchor_aspect = g_render_aspect;
@@ -3028,7 +3030,9 @@ VkImageView vk_present_depth(uint32_t *width, uint32_t *height) {
     NvnTexture *t = present_depth;
     present_depth = NULL;
     present_depth_area = 0;
-    if (!g_config.ssao || !t || !t->backend) return VK_NULL_HANDLE;
+    bool loading = present_loading;
+    present_loading = false;
+    if (!g_config.ssao || loading || !t || !t->backend) return VK_NULL_HANDLE;
     TexBackend *b = t->backend;
     if (!(b->aspect & VK_IMAGE_ASPECT_DEPTH_BIT) || !b->width || !b->height) return VK_NULL_HANDLE;
     vk_ms_resolve(b);
