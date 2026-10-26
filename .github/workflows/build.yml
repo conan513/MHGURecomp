@@ -61,15 +61,15 @@ jobs:
           New-Item -ItemType Directory -Force build | Out-Null
           Copy-Item src-tauri/target/release/mhgu-launcher.exe build/MHGU-Launcher.exe
 
-      - name: Build mhgurecomp.exe
+      - name: Build runtime (without game code)
         shell: msys2 {0}
         run: |
           make -j2 build/mhgurecomp.exe bundle LAUNCHER_PREBUILT=1 SKIP_GAMELIB=1
 
-      - name: Upload build artifact
+      - name: Upload runtime artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MHGURecomp-MHW-Controls-Windows
+          name: MHGURecomp-Runtime-Windows
           path: |
             build/mhgurecomp.exe
             build/MHGU-Launcher.exe

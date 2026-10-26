@@ -258,6 +258,11 @@ make -j4 GAME=/c/path/to/game      # compile everything into build/
 is not included in the repository. If you only want to build the runtime without your game files, use
 `make -j4 build/mhgurecomp.exe bundle SKIP_GAMELIB=1`.
 
+The GitHub Actions workflow builds and tests the launcher and runtime only. Its
+`MHGURecomp-Runtime-Windows` artifact does not include `mhgugame.dll` or game data: generated game code is not stored
+in the repository, and building it requires the user's own game files. To make a playable build, run `make gen` and
+the full build above with your own game files.
+
 The first full build takes a while (about 8 minutes on a 4-core Haswell with `-j4`; more cores: higher `-j`). Later
 builds only recompile what changed.
 
