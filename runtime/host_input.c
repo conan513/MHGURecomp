@@ -5,8 +5,8 @@
 //   by default), Space = B, R = Y, Q = L, E = R, Tab = ZL, T = ZR, Enter = Plus, Backspace = Minus, 1/2/3/4 and arrow
 //   keys = d-pad, Ctrl = left stick click, Alt = right stick click. Keyboard bindings can be changed in [Keyboard].
 //   While the game shows a text entry (names,
-//   chat) the keyboard types instead
-//   (runtime/textinput.c). F6 toggles SSAO, F7 cycles MSAA, F12 saves a screenshot, F11 the next 8
+//   chat) the keyboard types instead (runtime/textinput.c). F6 toggles SSAO, F7 cycles MSAA, F11 switches windowed
+//   <-> full screen, F12 saves a screenshot, Shift+F12 the next 8 frames.
 //   frames (exact rendered pixels, run\shots\), F10 dumps every render pass of the next 2 frames (debug, slow), F9 toggles how colour clears are done (debug).
 // Gamepad (SDL): face buttons by position as on a Switch controller (the bottom one is B), or by their labels
 //   (settings FaceButtons, runtime/config.c; MHGU_PAD_POSITIONAL=0|1 overrides).
@@ -186,17 +186,51 @@ static void control_poll(void) {
                 forge_test_hook((uint32_t)strtoul(arg, NULL, 16));
                 continue;
             }
+            if (!strcmp(cmd, "interpwatch")) {  // interpwatch <guest hex addr> <file of hex entries>: run those game
+                // functions (and all game code they call) in the interpreter, logging what changes the word at addr
+                void interp_watch(uint32_t, int);
+                void interp_add_range(uint32_t, uint32_t);
+                int dispatch_interpret(uint32_t, uint32_t);
+                FILE *fl = fopen(arg2, "r");
+                char fn[32];
+                int n = 0;
+                interp_add_range(0x200000, 0x1800000);
+                while (fl && fgets(fn, sizeof fn, fl)) {
+                    uint32_t e = (uint32_t)strtoul(fn, NULL, 16);
+                    if (e && dispatch_interpret(e, e + 4) > 0) n++;
+                }
+                if (fl) fclose(fl);
+                interp_watch((uint32_t)strtoul(arg, NULL, 16), 40);
+                LOG("[watch] %s: %d functions interpreted\n", arg, n);
+                continue;
+            }
+            if (!strcmp(cmd, "emact")) {  // emact <group> <index> [mode]: start a monster action (hle/emtrace.c)
+                void emtrace_request(uint32_t, uint32_t, uint32_t);
+                char arg3[16] = "";
+                sscanf(line, "%*s %*s %*s %15s", arg3);
+                emtrace_request((uint32_t)atoi(arg), (uint32_t)atoi(arg2), (uint32_t)atoi(arg3));
+                continue;
+            }
+            if (!strcmp(cmd, "emsweep")) {  // emsweep <group> <first> <last>: each monster action in turn (emtrace.c)
+                void emtrace_sweep(uint32_t, uint32_t, uint32_t);
+                char arg3[16] = "";
+                sscanf(line, "%*s %*s %*s %15s", arg3);
+                emtrace_sweep((uint32_t)atoi(arg), (uint32_t)atoi(arg2), (uint32_t)atoi(arg3));
+                continue;
+            }
             if (!strcmp(cmd, "poke")) {  // poke <guest hex address> <hex word>: write guest memory (reverse engineering)
                 uint32_t a = (uint32_t)strtoul(arg, NULL, 16) & ~3u, v = (uint32_t)strtoul(arg2, NULL, 16);
                 LOG("[poke] %08x: %08x -> %08x\n", a, LD32(a), v);
                 ST32(a, v);
                 continue;
             }
-            if (!strcmp(cmd, "fntrace")) {  // fntrace <lo hex> <hi hex> [n]: log the next n calls of guest functions there
-                void fntrace_set(uint32_t, uint32_t, int);
-                char arg3[16] = "";
-                sscanf(line, "%*s %*s %*s %15s", arg3);
-                fntrace_set((uint32_t)strtoul(arg, NULL, 16), (uint32_t)strtoul(arg2, NULL, 16), arg3[0] ? atoi(arg3) : 200);
+            if (!strcmp(cmd, "fntrace")) {  // fntrace <lo hex> <hi hex> [n] [r0 lo hex] [r0 hi hex]: log the next n calls of
+                                            // guest functions there (only those with r0 in [r0 lo, r0 hi) when given)
+                void fntrace_set(uint32_t, uint32_t, int, uint32_t, uint32_t);
+                char arg3[16] = "", arg4[16] = "", arg5[16] = "";
+                sscanf(line, "%*s %*s %*s %15s %15s %15s", arg3, arg4, arg5);
+                fntrace_set((uint32_t)strtoul(arg, NULL, 16), (uint32_t)strtoul(arg2, NULL, 16), arg3[0] ? atoi(arg3) : 200,
+                            (uint32_t)strtoul(arg4, NULL, 16), (uint32_t)strtoul(arg5, NULL, 16));
                 continue;
             }
             if (!strcmp(cmd, "fnnew")) {  // fnnew <lo hex> <hi hex> [learn ms]: log first calls only (dispatch.c)
@@ -358,7 +392,7 @@ void host_input_event(const SDL_Event *e) {
     switch (e->type) {
     case SDL_EVENT_KEY_DOWN: case SDL_EVENT_KEY_UP:
         if (e->key.scancode < SDL_SCANCODE_COUNT) keys[e->key.scancode] = e->type == SDL_EVENT_KEY_DOWN;
-        if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat) {  // F12: screenshot, F11: 8 consecutive frames (run\shots\)
+        if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat) {  // F12: screenshot, Shift+F12: 8 consecutive frames (run\shots\), F11: windowed <-> full screen
             static int nshot;
             uint64_t t = (uint64_t)time(NULL);
             if ((e->key.scancode == SDL_SCANCODE_RETURN || e->key.scancode == SDL_SCANCODE_KP_ENTER) && (e->key.mod & SDL_KMOD_ALT)) {
@@ -368,9 +402,11 @@ void host_input_event(const SDL_Event *e) {
             } else if (e->key.scancode == SDL_SCANCODE_F1) {
                 if (mouse_grab) LOG("[input] mouse released\n");
                 mouse_grab = false;
-            } else if (e->key.scancode == SDL_SCANCODE_F12)
+            } else if (e->key.scancode == SDL_SCANCODE_F12 && !(e->key.mod & SDL_KMOD_SHIFT))
                 snprintf(g_shot_request, sizeof g_shot_request, "shots/shot_%llu_%d.png", (unsigned long long)t, nshot++);
             else if (e->key.scancode == SDL_SCANCODE_F11) {
+                ui_toggle_fullscreen();
+            } else if (e->key.scancode == SDL_SCANCODE_F12) {
                 snprintf(g_burst_name, sizeof g_burst_name, "burst_%llu_%d", (unsigned long long)t, nshot++);
                 g_burst_index = 0;
                 g_burst_left = 8;
@@ -466,8 +502,31 @@ static void mouse_update(int *rx, int *ry) {
     *rx += (int)(x * t * 32767.0f), *ry += (int)(y * t * 32767.0f);
 }
 
+// The game's rumble (input_rumble) to the controller: on a change, at most every 16 ms (the game sends a value every
+// 5 ms, and a DualSense over Bluetooth takes a packet per call), renewed while it lasts, stopped at once.
+static void rumble_update(void) {
+    static uint32_t sent, peak;
+    static uint64_t sent_ns, on_ns;
+    static SDL_Gamepad *sent_pad;
+    uint32_t v = input_rumble();
+    uint64_t now = plat_now_ns();
+    if (v && !on_ns) on_ns = now, peak = 0;  // (the log: each rumble's length and strongest motor values)
+    if (v) peak = ((v >> 16) > (peak >> 16) ? v & 0xFFFF0000u : peak & 0xFFFF0000u) | ((v & 0xFFFF) > (peak & 0xFFFF) ? v & 0xFFFF : peak & 0xFFFF);
+    if (!v && on_ns) {
+        LOG("[input] rumble %.0f ms, low %u high %u%s\n", (now - on_ns) / 1e6, peak >> 16, peak & 0xFFFF, pad ? "" : " (no controller)");
+        on_ns = 0;
+    }
+    if (!pad) { sent_pad = NULL; return; }
+    if (pad != sent_pad) sent = 0, sent_pad = pad;
+    bool change = v != sent && (v == 0 || now - sent_ns >= 16000000ull), renew = v && now - sent_ns >= 100000000ull;
+    if (!change && !renew) return;
+    SDL_RumbleGamepad(pad, (Uint16)(v >> 16), (Uint16)v, v ? 200 : 0);
+    sent = v, sent_ns = now;
+}
+
 void host_input_update(void) {
     if (nscript < 0) script_parse();
+    rumble_update();
     control_poll();
     quickhunt_poll();  // (debug, MHGU_QUICKHUNT: runtime/hle/quickhunt.c)
     textinput_update();
