@@ -74,6 +74,7 @@ typedef struct {
     float fsr_reactive;       // reactive mask strength: 0..1
     int fsr_animsurf;         // animated surface detection: 1 on, 0 off
     int face_buttons;         // FACE_*: controller face buttons by position (the Switch layout) or by their labels
+    int controller_rumble;    // rumble the gamepad when the game requests vibration
     int ldn_port;             // local play: the port a hosted hub listens on (TCP; UDP for LAN search)
     char ldn_join[256];       // local play: hosts to search besides the LAN (host[:port], comma separated)
     int sync_small_monsters;  // multiplayer: small monsters synced like large ones (runtime/net/emsync.c)

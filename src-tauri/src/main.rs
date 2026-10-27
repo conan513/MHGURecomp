@@ -178,16 +178,23 @@ const FIELDS: &[Field] = &[
         kind: FieldKind::Toggle,
     },
     Field {
-        section: "Controls",
+        section: "Controller",
         key: "FaceButtons",
         id: "faceButtons",
         default: "Position",
         kind: FieldKind::Select(&["Position", "Label"]),
     },
     Field {
-        section: "Controls",
+        section: "Controller",
         key: "BackgroundInput",
         id: "backgroundInput",
+        default: "On",
+        kind: FieldKind::Toggle,
+    },
+    Field {
+        section: "Controller",
+        key: "Rumble",
+        id: "rumble",
         default: "On",
         kind: FieldKind::Toggle,
     },
@@ -569,7 +576,7 @@ const CANONICAL_SECTIONS: &[&str] = &[
     "Anti-aliasing",
     "Upscaler",
     "Performance",
-    "Controls",
+    "Controller",
     "Keyboard",
     "Mouse",
     "Multiplayer",
@@ -677,7 +684,14 @@ fn read_settings(directory: &Path) -> Result<Value, String> {
     };
 
     for field in FIELDS {
-        if let Some(value) = values.get(&address(field.section, field.key)) {
+        let current_address = address(field.section, field.key);
+        let legacy_address =
+            (field.section == "Controller").then(|| address("Controls", field.key));
+        if let Some(value) = values.get(&current_address).or_else(|| {
+            legacy_address
+                .as_ref()
+                .and_then(|legacy_address| values.get(legacy_address))
+        }) {
             settings.insert(field.id.to_string(), json!(value));
         }
     }
@@ -1015,12 +1029,25 @@ fn save_settings(directory: &Path, settings: &Value) -> Result<(), String> {
         Err(error) => return Err(format!("Could not read {}: {error}", ini.display())),
     };
     let original_lines = split_ini(&original_content);
+    let existing = parse_ini(&original_lines);
     let current_settings = read_settings(directory)?;
     let mut updates = Vec::new();
     for field in FIELDS {
         let value = string_setting(settings, field.id).unwrap_or_default();
         if current_settings.get(field.id).and_then(Value::as_str) != Some(value) {
-            updates.push((address(field.section, field.key), value.to_string()));
+            let current_address = address(field.section, field.key);
+            let legacy_address =
+                (field.section == "Controller").then(|| address("Controls", field.key));
+            let update_address = match legacy_address {
+                Some(legacy_address)
+                    if !existing.contains_key(&current_address)
+                        && existing.contains_key(&legacy_address) =>
+                {
+                    legacy_address
+                }
+                _ => current_address,
+            };
+            updates.push((update_address, value.to_string()));
         }
     }
     let quest_values = |settings: &Value| {
@@ -1050,7 +1077,6 @@ fn save_settings(directory: &Path, settings: &Value) -> Result<(), String> {
         return Ok(());
     }
 
-    let existing = parse_ini(&original_lines);
     let mut missing = BTreeMap::<String, Vec<(String, String)>>::new();
     for (current_address, value) in &updates {
         if existing.contains_key(current_address) {
@@ -1374,6 +1400,7 @@ mod tests {
         settings["fov"] = json!("1.2");
         settings["uiAnchor"] = json!("Edges");
         settings["backgroundInput"] = json!("Off");
+        settings["rumble"] = json!("Off");
         assert!(validate_settings(&settings).is_empty());
         save_settings(&directory, &settings).expect("save display settings");
 
@@ -1381,17 +1408,43 @@ mod tests {
         assert!(output.contains("AspectRatio = 21:9"));
         assert!(output.contains("FOV = 1.2"));
         assert!(output.contains("UIAnchor = Edges"));
-        assert!(output.contains("BackgroundInput = Off"));
+        assert!(output.contains("[Controller]\nBackgroundInput = Off\nRumble = Off"));
         let loaded = read_settings(&directory).expect("reload settings");
         assert_eq!(loaded["aspectRatio"], "21:9");
         assert_eq!(loaded["fov"], "1.2");
         assert_eq!(loaded["uiAnchor"], "Edges");
         assert_eq!(loaded["backgroundInput"], "Off");
+        assert_eq!(loaded["rumble"], "Off");
 
         settings["aspectRatio"] = json!("21:0");
         assert!(validate_settings(&settings).contains_key("aspectRatio"));
         settings["aspectRatio"] = json!("0");
         assert!(validate_settings(&settings).contains_key("aspectRatio"));
+        fs::remove_dir_all(directory).expect("clean temp directory");
+    }
+
+    #[test]
+    fn controller_settings_read_legacy_controls_section() {
+        let directory = temp_directory();
+        let original = "[Controls]\nFaceButtons = Label\nBackgroundInput = Off\n";
+        fs::write(ini_path(&directory), original).expect("write legacy controller settings");
+
+        let mut settings = read_settings(&directory).expect("load legacy settings");
+        assert_eq!(settings["faceButtons"], "Label");
+        assert_eq!(settings["backgroundInput"], "Off");
+        assert_eq!(settings["rumble"], "On");
+
+        settings["backgroundInput"] = json!("On");
+        settings["rumble"] = json!("Off");
+        save_settings(&directory, &settings).expect("save updated controller settings");
+
+        let output = fs::read_to_string(ini_path(&directory)).expect("read updated ini");
+        assert!(output.contains("[Controls]\nFaceButtons = Label\nBackgroundInput = On"));
+        assert!(output.contains("[Controller]\nRumble = Off"));
+        let loaded = read_settings(&directory).expect("reload controller settings");
+        assert_eq!(loaded["faceButtons"], "Label");
+        assert_eq!(loaded["backgroundInput"], "On");
+        assert_eq!(loaded["rumble"], "Off");
         fs::remove_dir_all(directory).expect("clean temp directory");
     }
 

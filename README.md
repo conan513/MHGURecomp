@@ -112,12 +112,12 @@ Click in the game window to capture the mouse for the camera; Escape lets it go 
 window). `MouseSensitivity` in the ini's `[Mouse]` section sets its speed; the game's own camera options (speed,
 inverted axes) apply to it too.
 
-Keyboard bindings can be changed in the launcher's **Controls** settings by clicking a key field and pressing a
+Keyboard bindings can be changed in the launcher's **Keyboard/Mouse** settings by clicking a key field and pressing a
 replacement key. Buttons have alternate bindings (`ButtonX` / `ButtonXAlt`, for example), and the D-pad has separate
 primary and alternate keys so both the number row and arrow keys can work at once. These are stored in the ini's
 `[Keyboard]` section. Key names use SDL's usual names, such as `Left Shift` or `Keypad Enter`.
 
-Mouse button assignments can also be changed in **Controls**. The left, middle, right and two side buttons can each
+Mouse button assignments can also be changed in **Keyboard/Mouse**. The left, middle, right and two side buttons can each
 activate any Switch button or be set to `None`; the first click that captures the mouse is not sent to the game.
 These assignments are stored in `[Mouse]` as `LeftButton`, `MiddleButton`, `RightButton`, `X1Button` and `X2Button`.
 
@@ -141,8 +141,8 @@ settings it does not manage. The ini file can still be edited manually. In short
 - `[Upscaler]`: `FSR` (On / Off), `FSRQuality` (NativeAA / Quality / Balanced / Performance / UltraPerformance), `Sharpness` (0 to 1), `ObjectMotion`, `Reactive` (0 to 1), and `AnimSurf`. FSR renders the 3D scene below output resolution and reconstructs it temporally; the HUD remains at output resolution. MSAA and FXAA are disabled while FSR is active. Some GPUs may not expose the Vulkan features FSR requires, in which case the game falls back to ordinary scaling. See [FSR implementation notes](docs/FSR-PORT.md).
 - `[Performance]`: `FPS` (30 to 240), `VSync` (On / Off; above your monitor's refresh rate, turn VSync off)
 - `[Keyboard]`: configurable keys for the keyboard's Switch buttons and stick directions
-- `[Controls]`: `FaceButtons` (Position / Label), `BackgroundInput` (On / Off: the controller keeps working while
-  the game's window is in the background, such as with a wiki in front of it; default On)
+- `[Controller]`: `FaceButtons` (Position / Label), `BackgroundInput` (On / Off: controller input keeps working while
+  the game's window is in the background), and `Rumble` (On / Off: pass the game's vibration to the controller)
 - `[Mouse]`: `MouseSensitivity` (1 = default, 0.1 to 10) and configurable mouse button assignments
 - `[Multiplayer]`: `Port`, `Join` (addresses of hosts outside your LAN), `SyncSmallMonsters`
 - `[Monster HP]`: HP factors for 1 to 4 hunters in Hub quests, and per-quest exceptions (default: all 1, the

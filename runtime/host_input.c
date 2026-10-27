@@ -508,7 +508,7 @@ static void rumble_update(void) {
     static uint32_t sent, peak;
     static uint64_t sent_ns, on_ns;
     static SDL_Gamepad *sent_pad;
-    uint32_t v = input_rumble();
+    uint32_t v = g_config.controller_rumble ? input_rumble() : 0;
     uint64_t now = plat_now_ns();
     if (v && !on_ns) on_ns = now, peak = 0;  // (the log: each rumble's length and strongest motor values)
     if (v) peak = ((v >> 16) > (peak >> 16) ? v & 0xFFFF0000u : peak & 0xFFFF0000u) | ((v & 0xFFFF) > (peak & 0xFFFF) ? v & 0xFFFF : peak & 0xFFFF);

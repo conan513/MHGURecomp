@@ -34,6 +34,7 @@ Config g_config = {
     .fsr_reactive = 0.9f,
     .fsr_animsurf = 1,
     .face_buttons = FACE_POSITION,
+    .controller_rumble = 1,
     .ldn_port = 39500,
     .sync_small_monsters = 1,
     .bonus_content = 1,
@@ -137,12 +138,15 @@ static const char DEFAULT_INI[] =
     "; Off: frames are shown as soon as they are done, up to FPS (tearing possible).\n"
     "VSync = On\n"
     "\n"
-    "[Controls]\n"
+    "[Controller]\n"
     "; Controller face buttons: Position uses the Switch layout; Label follows the letters printed on the buttons.\n"
     "; Position: the Switch layout the game is made for - the right button is A (confirm), the bottom one B, the left\n"
     ";   one Y, the top one X, whatever is printed on them (on an Xbox controller the in-game icons then don't match).\n"
     "; Label: by the letter printed on the button (an Xbox controller's A is A; the icons match, the layout is awkward).\n"
     "FaceButtons = Position\n"
+    "\n"
+    "; Rumble: On or Off. Sends the game's vibration to the connected controller.\n"
+    "Rumble = On\n"
     "\n"
     "; The controller while the game's window is in the background (a wiki in front of it, or on another screen):\n"
     "; On (it keeps working) or Off. The keyboard and mouse only work while the window has the focus.\n"
@@ -476,6 +480,10 @@ static void set_key(const char *key, char *val, int line) {
             g_config.face_buttons = FACE_POSITION;
         else if (!strcmp(v, "label") || !strcmp(v, "labels") || !strcmp(v, "xbox"))
             g_config.face_buttons = FACE_LABEL;
+        else ok = false;
+    } else if (!strcmp(k, "rumble")) {
+        if (!strcmp(v, "on") || !strcmp(v, "1") || !strcmp(v, "true") || !strcmp(v, "yes")) g_config.controller_rumble = 1;
+        else if (!strcmp(v, "off") || !strcmp(v, "0") || !strcmp(v, "false") || !strcmp(v, "no")) g_config.controller_rumble = 0;
         else ok = false;
     } else if (!strcmp(k, "mousesensitivity")) {
         float f = strtof(v, NULL);

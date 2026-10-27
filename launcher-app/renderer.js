@@ -15,7 +15,8 @@ const launcher = Object.freeze({
 const categories = [
   { id: 'display', title: 'Display', icon: '◈' },
   { id: 'graphics', title: 'Graphics', icon: '◇' },
-  { id: 'controls', title: 'Controls', icon: '⌘' },
+  { id: 'controller', title: 'Controller', icon: '◉' },
+  { id: 'keyboardMouse', title: 'Keyboard/Mouse', icon: '⌘' },
   { id: 'multiplayer', title: 'Multiplayer', icon: '◎' },
   { id: 'gameplay', title: 'Gameplay', icon: '⚔' },
 ];
@@ -51,7 +52,6 @@ const mouseBindings = [
 const movementBindingStart = keyboardBindings.findIndex(([id]) => id === 'keyStickUp');
 
 const controlIslands = [
-  { title: 'Controller', fields: ['faceButtons', 'backgroundInput'] },
   { title: 'Mouse', fields: ['mouseSensitivity', ...mouseBindings.map(([id]) => id)] },
   {
     title: 'Keyboard',
@@ -78,7 +78,8 @@ const categoryFields = {
     'msaa', 'fxaa', 'ssao', 'fsr', 'fsrQuality', 'fsrSharpness',
     'fsrObjectMotion', 'fsrReactive', 'fsrAnimSurf', 'fps', 'vsync',
   ],
-  controls: [],
+  controller: ['faceButtons', 'backgroundInput', 'rumble'],
+  keyboardMouse: [],
   multiplayer: ['port', 'join', 'syncSmallMonsters'],
   gameplay: ['villageQuestsInHub', 'hubHp', 'bonusContent', 'hp1', 'hp2', 'hp3', 'hp4', 'quests'],
 };
@@ -158,6 +159,11 @@ const fieldInfo = {
     label: 'Controller works in background',
     kind: 'toggle',
     help: 'Keep controller input active while another window is focused.',
+  },
+  rumble: {
+    label: 'Controller rumble',
+    kind: 'toggle',
+    help: "Send the game's vibration to the connected controller.",
   },
   mouseSensitivity: {
     label: 'Mouse sensitivity',
@@ -391,7 +397,9 @@ function renderCategory(categoryId) {
     const hpGroup = makeElement('div', 'hp-grid wide');
     for (const id of fieldIds.slice(3, 7)) hpGroup.append(createField(id));
     elements['field-grid'].append(hpGroup, createField('quests'));
-  } else if (categoryId === 'controls') {
+  } else if (categoryId === 'controller') {
+    elements['field-grid'].append(createControlIsland('Controller', fieldIds));
+  } else if (categoryId === 'keyboardMouse') {
     for (const island of controlIslands) {
       elements['field-grid'].append(createControlIsland(island.title, island.fields, island.groups));
     }
