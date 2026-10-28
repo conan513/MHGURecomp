@@ -19,7 +19,6 @@ extern bool g_fsr_on;  // FSR is on and works (set once at start-up: vk_fsr_init
 
 void vk_fsr_init(void);                    // device.c, once the device exists
 void vk_fsr_draw(const FsrDraw *d);        // exec.c draw(): may run FSR (the start of the HUD) before this draw
-void vk_ssao_apply_scene(NvnTexture *color, NvnTexture *depth);  // exec.c: scene-only SSAO before the HUD is drawn
 // exec.c, from the start of the HUD to the frame's present: the game's full-screen image, the window texture it is
 // copied to, and the depth target drawn with them, as stand-ins at the output size (else t itself). depth: t is a
 // depth target of a pass whose colour targets have stand-ins.

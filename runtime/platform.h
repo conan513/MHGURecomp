@@ -41,6 +41,8 @@ void plat_sleep_until_ns(uint64_t t);      // precise wait for plat_now_ns() >= 
 void plat_init(void);
 // Returns the executable path encoded as UTF-8 (Windows) or the native path (Linux).
 bool plat_exe_path(char *buf, size_t size);
+unsigned long plat_process_id(void);
+bool plat_wait_process(unsigned long pid); // Restart child waits for old host to release saves and logs.
 // Started without a game folder: work in the executable's folder; log to log.txt there when there is no terminal
 // (plat_fatal_notice then tells the player about a fatal error).
 void plat_standalone(void);
@@ -53,6 +55,9 @@ void plat_fatal_notice(void);
 const char *plat_symbol(uint64_t pc, uint64_t *offset);
 void plat_print_backtrace(void);
 void plat_crash_handler_install(void);
+// Called (when set) after a guest page nobody mapped was first touched and got backed with zeros: guest address,
+// 1 write / 0 read / -1 unknown. Runs in the fault handler: Forge uses it to name a plugin's bad pointer.
+extern void (*plat_touch_hook)(uint64_t guest_addr, int write);
 void rt_fault_report(const char *what, uint64_t fault_addr, uint64_t host_pc, uint64_t host_lr) __attribute__((noreturn));
 
 #ifdef __cplusplus

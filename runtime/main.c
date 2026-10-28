@@ -9,6 +9,11 @@
 #include "hle.h"
 #include "kernel.h"
 #include "mods.h"
+#include "app_actions.h"
+
+#ifndef MHGU_VERSION
+#define MHGU_VERSION "unknown"  // (the Makefile gives the build's release: VERSION)
+#endif
 
 const char *g_game_dir = "game";  // folder holding exefs/ and romfs/ (the player's own dump)
 
@@ -49,7 +54,7 @@ static void boot(const char *root) {
     villagehub_init();  // (Village quests at the Hub / Pub counter: runtime/hle/villagehub.c)
     movelog_init();  // (debug, MHGU_LOG_MOVES: runtime/hle/movelog.c)
     quickhunt_init();  // (debug, MHGU_QUICKHUNT: runtime/hle/quickhunt.c)
-    camjit_init();  // camera data for FSR jitter / motion vectors and depth-aware SSAO
+    camjit_init();  // (FSR: the main camera and its jitter: runtime/hle/camera_jitter.c)
     emtrace_init();  // (debug, MHGU_EMTRACE: runtime/hle/emtrace.c)
     cheats_init();  // (cheat codes from cheats/: runtime/cheats.c)
 
@@ -75,6 +80,13 @@ static void boot(const char *root) {
 }
 
 int main(int argc, char **argv) {
+    for (int i = 1; i < argc; ++i) {
+        if (!strncmp(argv[i], "--recomp-wait=", 14)) {
+            char *end; unsigned long pid = strtoul(argv[i] + 14, &end, 10);
+            if (!pid || *end || !plat_wait_process(pid)) return 1;
+        }
+    }
+    ui_capture_launch_args(argc, argv);
     plat_init();
     setvbuf(stderr, NULL, _IONBF, 0);
     bool given = false;
@@ -124,6 +136,7 @@ int main(int argc, char **argv) {
             return 1;
         }
     }
+    LOG("MHGU Recomp %s\n", MHGU_VERSION);
     { void fnprof_init(void); fnprof_init(); }
     crash_handler_install();
     ui_init();

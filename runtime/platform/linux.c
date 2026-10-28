@@ -64,6 +64,7 @@ static bool lazy_commit(uint64_t a) {
     return atomic_load(&g_chunk[idx]) == CHUNK_READY;  // (whoever won it backed the page: resume)
 }
 
+void (*plat_touch_hook)(uint64_t guest_addr, int write);
 static void fault_handler(int sig, siginfo_t *si, void *uc);
 
 bool plat_reserve_guest(uint64_t base, uint64_t size) {
@@ -136,6 +137,16 @@ void plat_init(void) {
     // send() on a dropped Local Play connection gives EPIPE here instead of killing the process: Windows reports
     // WSAEPIPE to the caller, which is what nn::socket expects.
     signal(SIGPIPE, SIG_IGN);
+}
+
+unsigned long plat_process_id(void) { return (unsigned long)getpid(); }
+bool plat_wait_process(unsigned long pid) {
+    struct timespec pause = {0, 10000000};
+    for (int i = 0; i < 3000; ++i) {
+        if (kill((pid_t)pid, 0) < 0) return errno == ESRCH;
+        nanosleep(&pause, NULL);
+    }
+    return false;
 }
 
 bool plat_exe_path(char *buf, size_t size) {
@@ -273,7 +284,10 @@ static const char *sig_name(int sig) {
 static void fault_handler(int sig, siginfo_t *si, void *uc) {
     ucontext_t *ctx = (ucontext_t *)uc;
     uint64_t fa = si && si->si_addr ? (uint64_t)(uintptr_t)si->si_addr : 0;
-    if ((sig == SIGSEGV || sig == SIGBUS) && lazy_commit(fa)) return;  // (a guest page first touched: back it, resume)
+    if ((sig == SIGSEGV || sig == SIGBUS) && lazy_commit(fa)) {  // (a guest page first touched: back it, resume)
+        if (plat_touch_hook) plat_touch_hook(fa - g_lo, (ctx->uc_mcontext.gregs[REG_ERR] & 2) != 0);
+        return;
+    }
     uint64_t pc = (uint64_t)ctx->uc_mcontext.gregs[REG_RIP];
     uint64_t sp = (uint64_t)ctx->uc_mcontext.gregs[REG_RSP], lr = 0, end = 0;
     if (plat_committed(sp, &end) && end - sp >= 8) lr = *(const uint64_t *)(uintptr_t)sp;
@@ -296,3 +310,21 @@ void plat_crash_handler_install(void) {
     sigaction(SIGFPE, &sa, NULL);
     sigaction(SIGILL, &sa, NULL);
 }
+
+// ---- glibc's older math symbols
+// glibc 2.43 and 2.44 gave these functions new symbol versions under the same names, and a build on a current
+// distribution binds to those: the executable then would not start with an older glibc (SteamOS, Debian 13: 2.41).
+// The link sends every call (also FFmpeg's and ImGui's) here instead (Makefile GLIBC_WRAP: -Wl,--wrap), and these call
+// the versions every x86-64 glibc has. The Makefile checks after the link that nothing newer than GLIBC_MAX is left.
+float glibc_old_sqrtf(float), glibc_old_acosf(float), glibc_old_atan2f(float, float);
+double glibc_old_sinh(double), glibc_old_cosh(double);
+__asm__(".symver glibc_old_sqrtf, sqrtf@GLIBC_2.2.5");
+__asm__(".symver glibc_old_acosf, acosf@GLIBC_2.2.5");
+__asm__(".symver glibc_old_atan2f, atan2f@GLIBC_2.2.5");
+__asm__(".symver glibc_old_sinh, sinh@GLIBC_2.2.5");
+__asm__(".symver glibc_old_cosh, cosh@GLIBC_2.2.5");
+float __wrap_sqrtf(float x) { return glibc_old_sqrtf(x); }
+float __wrap_acosf(float x) { return glibc_old_acosf(x); }
+float __wrap_atan2f(float y, float x) { return glibc_old_atan2f(y, x); }
+double __wrap_sinh(double x) { return glibc_old_sinh(x); }
+double __wrap_cosh(double x) { return glibc_old_cosh(x); }

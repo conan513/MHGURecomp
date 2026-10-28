@@ -39,7 +39,7 @@ typedef struct {
     bool divisor, demote, custom_border, depth_clamp, stencil_export;
     volatile uint32_t msaa;    // samples for the 3D scene's passes (settings MSAA, as far as the GPU allows): 1 = off
     uint32_t msaa_counts;      // the sample counts MSAA can use (bits 2, 4, 8)
-    bool fsr_fp16, fsr_storage_wo_format;  // FSR: enabled shader features
+    bool fsr_fp16, fsr_storage_wo_format;  // FSR (fsr.c): shaderFloat16 / shaderStorageImageWriteWithoutFormat enabled
     // window
     VkSurfaceKHR surface;
     VkSwapchainKHR swapchain;
@@ -128,6 +128,7 @@ bool vk_format_alpha_one(uint32_t nvn_format);
 bool renderer_format_is_depth(uint32_t f);
 bool renderer_format_has_stencil(uint32_t f);
 void renderer_mark_gpu_owned(NvnTexture *t);
+void renderer_mark_dynamic(NvnTexture *t);  // its CPU-written contents change often: checked every frame
 // View of t (optionally through an NVN texture view) for rendering or sampling.
 VkImageView vk_view(NvnTexture *t, const NvnTextureView *v, bool has_view, bool render, int want_textype);
 void vk_present_depth_forget(NvnTexture *t);

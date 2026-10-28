@@ -29,3 +29,4 @@ __pycache__/
 /run2/
 /run3/
 /third_party/ffmpeg/
+/dist/
