@@ -1,6 +1,5 @@
-// The main 3D camera for the FSR upscaler (runtime/nvn/vulkan/fsr.c): its matrices, captured per frame for the
-// camera motion vectors, and the sub-pixel jitter (a Halton sequence) put into its projection, which FSR needs to
-// rebuild detail from several frames. Only with [Upscaler] FSR = On (or the test option below).
+// The main 3D camera: its view matrix receives direct mouse-look rotation, and its matrices are captured for FSR
+// motion vectors and depth-aware SSAO. FSR's sub-pixel jitter (a Halton sequence) is applied only when enabled.
 //
 // The game's camera (an sCamera / uCamera object: +0x30 far, +0x34 near, +0x38 aspect, +0x3c vertical field of view
 // in degrees, +0x40 eye, +0x50 up, +0x60 target) gets its matrices from two small functions:
@@ -28,12 +27,14 @@
 #include "../camera_jitter.h"
 #include "../config.h"
 #include "../hle.h"
+#include "../rt.h"
 
 #define FN_LOOKAT     0x21c33cu  // look-at: r0 = out view matrix, r1 = camera
 #define FN_PROJECTION 0x21c358u  // projection: r0 = out matrix, r1 = camera
 #define CAM_FAR       0x30u
 #define CAM_NEAR      0x34u
 #define CAM_ASPECT    0x38u
+#define CAM_TARGET    0x60u
 #define RING          64u
 
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -46,6 +47,13 @@ static uint32_t g_rw = 1920, g_rh = 1080, g_phases = 8;
 static bool g_test;                 // MHGU_JITTER_TEST
 static float g_test_xy[2];
 static bool g_log;
+static uint32_t g_mouse_cam;
+static uint64_t g_mouse_present = UINT64_MAX;
+static float g_mouse_yaw, g_mouse_pitch;
+static float g_mouse_yaw_target, g_mouse_pitch_target;
+
+#define MOUSE_RAD_PER_COUNT (0.06f * 0.017453292519943295f)
+#define MOUSE_SMOOTH_ALPHA 0.5f
 
 static bool main_aspect(float a) {
     return fabsf(a - 16.0f / 9.0f) < 0.01f || fabsf(a - g_render_aspect) < 0.01f;
@@ -59,11 +67,61 @@ static float halton(uint32_t i, uint32_t base) {
 
 static bool readable(uint32_t a, uint32_t n) { return a >= 0x1000u && a < 0xFFFFFFFFu - n && !(a & 3); }
 
+static bool mouse_orbit_view(float m[16], const float target[3], float yaw, float pitch) {
+    float r[3][3], out[3][3], eye[3];
+    for (int i = 0; i < 3; i++)
+        for (int j = 0; j < 3; j++) r[i][j] = m[i * 4 + j];
+    for (int i = 0; i < 3; i++)
+        eye[i] = -(m[12] * m[i * 4] + m[13] * m[i * 4 + 1] + m[14] * m[i * 4 + 2]);
+    float ox = eye[0] - target[0], oy = eye[1] - target[1], oz = eye[2] - target[2];
+    float radius = sqrtf(ox * ox + oy * oy + oz * oz);
+    if (!(radius > 1.0f) || !isfinite(radius)) return false;
+    float cy = cosf(yaw), sy = sinf(yaw), cp = cosf(pitch), sp = sinf(pitch);
+    const float rotate[3][3] = {{cy, sy * sp, -sy * cp}, {0, cp, sp}, {sy, -cy * sp, cy * cp}};
+    for (int i = 0; i < 3; i++)
+        for (int j = 0; j < 3; j++) {
+            out[i][j] = 0;
+            for (int k = 0; k < 3; k++) out[i][j] += r[i][k] * rotate[k][j];
+        }
+    for (int i = 0; i < 3; i++)
+        for (int j = 0; j < 3; j++) m[i * 4 + j] = out[i][j];
+    for (int i = 0; i < 3; i++) eye[i] = target[i] + radius * out[i][2];
+    for (int j = 0; j < 3; j++) m[12 + j] = -(eye[0] * out[0][j] + eye[1] * out[1][j] + eye[2] * out[2][j]);
+    return true;
+}
+
 static void lookat(Cpu *c) {
     uint32_t out = c->r[0], cam = c->r[1];
     fnhook_call_original(c, FN_LOOKAT);
     if (!readable(out, 64) || !readable(cam, 0x70) || !main_aspect(LDF(cam + CAM_ASPECT))) return;
     pthread_mutex_lock(&g_lock);
+    if (g_mouse_present != g_present_count) {
+        float dx, dy;
+        g_mouse_present = g_present_count;
+        if (g_mouse_cam != cam) {
+            g_mouse_yaw = g_mouse_pitch = 0;
+            g_mouse_yaw_target = g_mouse_pitch_target = 0;
+        }
+        g_mouse_cam = cam;
+        host_input_take_mouse_delta(&dx, &dy);
+        g_mouse_yaw_target += dx * g_config.mouse_sensitivity * MOUSE_RAD_PER_COUNT;
+        g_mouse_pitch_target += dy * g_config.mouse_sensitivity * MOUSE_RAD_PER_COUNT;
+        if (g_mouse_pitch_target > 1.2f) g_mouse_pitch_target = 1.2f;
+        if (g_mouse_pitch_target < -1.2f) g_mouse_pitch_target = -1.2f;
+        g_mouse_yaw_target = remainderf(g_mouse_yaw_target, 6.28318531f);
+        g_mouse_yaw += (g_mouse_yaw_target - g_mouse_yaw) * MOUSE_SMOOTH_ALPHA;
+        g_mouse_pitch += (g_mouse_pitch_target - g_mouse_pitch) * MOUSE_SMOOTH_ALPHA;
+        if (g_mouse_pitch > 1.2f) g_mouse_pitch = 1.2f;
+        if (g_mouse_pitch < -1.2f) g_mouse_pitch = -1.2f;
+        g_mouse_yaw = remainderf(g_mouse_yaw, 6.28318531f);
+    }
+    float view[16];
+    memcpy(view, G2H(out), 64);
+    if (g_mouse_cam == cam) {
+        float target[3] = {LDF(cam + CAM_TARGET), LDF(cam + CAM_TARGET + 4), LDF(cam + CAM_TARGET + 8)};
+        mouse_orbit_view(view, target, g_mouse_yaw, g_mouse_pitch);
+    }
+    memcpy(G2H(out), view, 64);
     int i = 0;
     while (i < g_nviews && g_views[i].cam != cam) i++;
     if (i == g_nviews) {
@@ -71,7 +129,7 @@ static void lookat(Cpu *c) {
         else i = 7;  // (more cameras than that: the last slot is reused)
     }
     g_views[i].cam = cam;
-    memcpy(g_views[i].m, G2H(out), 64);
+    memcpy(g_views[i].m, view, 64);
     pthread_mutex_unlock(&g_lock);
 }
 
@@ -146,10 +204,9 @@ void camjit_init(void) {
     const char *e = getenv("MHGU_JITTER_TEST");
     g_test = e && sscanf(e, "%f,%f", &g_test_xy[0], &g_test_xy[1]) == 2;
     g_log = getenv("MHGU_JITTER_LOG") != NULL;
-    if (!g_config.fsr && !g_config.ssao && !g_test) return;
     g_rw = g_render_size[0], g_rh = g_render_size[1];
     fnhook_set(FN_LOOKAT, hle_register("camjit:lookat", lookat));
     fnhook_set(FN_PROJECTION, hle_register("camjit:projection", projection));
     if (g_test) LOG("[camjit] test: the 3D picture shifted by (%g, %g) render pixels (x right, y down)\n", g_test_xy[0], g_test_xy[1]);
-    else LOG("[camjit] main camera hooked (main+0x1C33C view, main+0x1C358 projection)\n");
+    else LOG("[camjit] main camera hooked (mouse look / FSR / SSAO)\n");
 }

@@ -81,7 +81,7 @@ typedef struct {
     int bonus_content;        // free downloads copied from a donor save into saves without any (runtime/services/bonus.c)
     int village_in_hub;       // L / R at the Hub's / Pub's quest counter switch to Village quests (runtime/hle/villagehub.c)
     HpScale hp;               // large monster HP in Hub-type quests (runtime/hle/hpscale.c)
-    float mouse_sensitivity;  // mouse look: the speed for full right stick tilt is divided by it (runtime/host_input.c)
+    float mouse_sensitivity;  // mouse look: degrees per mouse count, scaled by this value (host_input.c/camera_jitter.c)
     int mouse_buttons[MOUSE_BUTTON_COUNT]; // Switch button index, or -1 when unbound (runtime/host_input.c)
     int keyboard[KEY_BINDING_COUNT]; // SDL scancodes for the keyboard bindings (runtime/host_input.c)
     float aspect_ratio;       // the picture's shape (width / height), 0: the window's; never below 16:10 (config.c)

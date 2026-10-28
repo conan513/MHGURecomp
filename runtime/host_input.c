@@ -1,7 +1,7 @@
 // Host controls -> the Switch controller the game reads (runtime/hle/input.c).
 //
-// Keyboard and mouse: WASD left stick (Left Shift held: half tilt, walking), mouse movement right stick (camera; click
-//   in the window to capture the mouse, Esc releases it), mouse buttons use [Mouse] mappings (left = X and right = A
+// Keyboard and mouse: WASD left stick (Left Shift held: half tilt, walking), mouse look (relative movement after a
+//   click in the window, Esc releases it), mouse buttons use [Mouse] mappings (left = X and right = A
 //   by default), Space = B, R = Y, Q = L, E = R, Tab = ZL, T = ZR, Enter = Plus, Backspace = Minus, 1/2/3/4 and arrow
 //   keys = d-pad, Ctrl = left stick click, Alt = right stick click. Keyboard bindings can be changed in [Keyboard].
 //   While the game shows a text entry (names,
@@ -15,7 +15,6 @@
 // Scripted input (tests): MHGU_INPUT="frame:BUTTON:frames,..." holds BUTTON from that presented frame for that many
 //   frames. BUTTON: A B X Y L R ZL ZR PLUS MINUS LEFT UP RIGHT DOWN LSTICK RSTICK, or STICK_UP/DOWN/LEFT/RIGHT and
 //   RSTICK_UP/DOWN/LEFT/RIGHT (full tilt).
-#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -48,18 +47,15 @@ static const struct { int binding; int btn; } key_buttons[] = {
     {KEY_BUTTON_RSTICK, BTN_RSTICK}, {KEY_BUTTON_RSTICK_ALT, BTN_RSTICK},
 };
 
-// ---- mouse: captured (relative mode) after a click in the window, Esc lets it go. Its movement is the right stick:
-// the speed it moves at, smoothed over a few milliseconds, as the stick's tilt (full tilt at MOUSE_FULL_SPEED counts a
-// second, times the settings' MouseSensitivity). Mouse buttons have configurable Switch button bindings.
-#define MOUSE_FULL_SPEED 1500.0f
-#define MOUSE_SMOOTH_S 0.025f  // (the averaging time: mice report at 125-8000 Hz, the game reads at its frame rate)
-// The camera ignores the right stick below about 39% tilt (any direction: a round dead zone; measured 2026-10-23, 38%
-// still, 40% turning slowly, then faster up to full tilt): the mouse's tilt starts there, so slow movements turn too.
-#define MOUSE_DEADZONE 0.40f
+// ---- mouse: captured (relative mode) after a click in the window, Esc lets it go. Relative movement is sent as the
+// right stick's tilt each update; MouseSensitivity is calibrated so 1500 counts/second reaches full tilt.
+// Mouse buttons have configurable Switch button bindings.
 static bool mouse_grab;       // the player's choice: clicked in (true) or Esc / focus lost (false)
 static bool mouse_captured;   // relative mode on now (grabbed, and no Forge menu open)
 static bool mouse_no_capture; // relative mode refused (WSLg, some Wayland compositors): clicks are buttons, no mouse look
 static float mouse_dx, mouse_dy;  // counts moved since the last update
+static float mouse_look_dx, mouse_look_dy;
+static pthread_mutex_t mouse_look_lock = PTHREAD_MUTEX_INITIALIZER;
 static bool mouse_down[MOUSE_BUTTON_COUNT];
 static const Uint8 mouse_sdl_buttons[MOUSE_BUTTON_COUNT] = {
     SDL_BUTTON_LEFT, SDL_BUTTON_MIDDLE, SDL_BUTTON_RIGHT, SDL_BUTTON_X1, SDL_BUTTON_X2,
@@ -468,8 +464,8 @@ void host_input_event(const SDL_Event *e) {
 
 static int32_t clamp_axis(int v) { return v < -32767 ? -32767 : v > 32767 ? 32767 : v; }
 
-// Capture or release the mouse as wanted, and add its movement to the right stick.
-static void mouse_update(int *rx, int *ry) {
+// Capture or release the mouse as wanted, and queue its relative movement for the camera hook.
+static void mouse_update(void) {
     bool want = mouse_grab && !overlay_menu_open();  // (Forge's menu: the pointer is its)
     SDL_Window *w = ui_window();
     if (want != mouse_captured && w) {
@@ -482,24 +478,22 @@ static void mouse_update(int *rx, int *ry) {
         mouse_dx = mouse_dy = 0;
     }
     static uint64_t last;
-    static float vx, vy;  // the speed, smoothed: counts a second
     uint64_t now = plat_now_ns();
     float dt = last ? (float)(now - last) * 1e-9f : 0.0f;
     last = now;
     if (dt > 0.1f) dt = 0.1f;
     if (now < test_until) mouse_dx += test_vx * dt, mouse_dy += test_vy * dt;
-    if (dt > 0.0f) {
-        float a = 1.0f - expf(-dt / MOUSE_SMOOTH_S);
-        vx += (mouse_dx / dt - vx) * a, vy += (mouse_dy / dt - vy) * a;
-    }
+    pthread_mutex_lock(&mouse_look_lock);
+    mouse_look_dx += mouse_dx, mouse_look_dy += mouse_dy;
+    pthread_mutex_unlock(&mouse_look_lock);
     mouse_dx = mouse_dy = 0;
-    if (!mouse_captured && now >= test_until) vx = vy = 0;
-    float s = g_config.mouse_sensitivity / MOUSE_FULL_SPEED;
-    float x = vx * s, y = -vy * s;  // (the mouse's y is down, the stick's up)
-    float m = sqrtf(x * x + y * y);
-    if (m < 0.02f) return;
-    float t = (MOUSE_DEADZONE + (1.0f - MOUSE_DEADZONE) * (m > 1.0f ? 1.0f : m)) / m;
-    *rx += (int)(x * t * 32767.0f), *ry += (int)(y * t * 32767.0f);
+}
+
+void host_input_take_mouse_delta(float *dx, float *dy) {
+    pthread_mutex_lock(&mouse_look_lock);
+    *dx = mouse_look_dx, *dy = mouse_look_dy;
+    mouse_look_dx = mouse_look_dy = 0;
+    pthread_mutex_unlock(&mouse_look_lock);
 }
 
 // The game's rumble (input_rumble) to the controller: on a change, at most every 16 ms (the game sends a value every
@@ -548,7 +542,7 @@ void host_input_update(void) {
     if (kx && ky) k = k * 7071 / 10000;  // diagonals: same length as straight
     lx += kx * k, ly += ky * k;
     b |= mouse_button_state();
-    mouse_update(&rx, &ry);
+    mouse_update();
 
     if (pad) {
         static const struct { SDL_GamepadButton sdl; int btn; } pad_buttons[] = {

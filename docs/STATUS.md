@@ -595,8 +595,8 @@ Slickaxe x20). Palico downloads not checked. The quest ARCs equal the RomFS file
 version (building the regions from the RomFS) is possible once the flag bits and the pack / Palico records are known.
 
 Controls: see `runtime/host_input.c` (keyboard bindings are configurable in the launcher and ini [Keyboard]; defaults:
-WASD left stick, mouse look (relative mode after a click, Esc releases; mouse speed smoothed over 25 ms as the right
-stick tilt, offset past the camera's round ~39% stick dead zone; ini [Mouse] MouseSensitivity), clicks = X / A,
+WASD left stick, mouse look (relative mode after a click, Esc releases; raw mouse delta rotates the rendered game
+camera directly without the right-stick limit, smoothing or dead zone; ini [Mouse] MouseSensitivity), clicks = X / A,
 Space / R = B / Y, Tab / T = ZL / ZR, 1-4 and arrows = d-pad, Ctrl / Alt = stick clicks, Enter = Plus; SDL gamepads, face
 buttons by position (Switch layout) or label: ini FaceButtons;
 controller also works with the window in the background, ini BackgroundInput = On (default;

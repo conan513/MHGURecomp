@@ -15,7 +15,7 @@ typedef struct {
     uint32_t cam;              // the camera object (guest address)
 } CamRecord;
 
-void camjit_init(void);  // hooks when FSR or SSAO is enabled
+void camjit_init(void);  // camera view hook for mouse look, FSR and SSAO
 // Renderer: jitter on or off from the next capture on, the 3D render size and the Halton sequence's length.
 void camjit_set(bool on, uint32_t render_w, uint32_t render_h, uint32_t phases);
 bool camjit_latest(CamRecord *out);              // the newest capture (false: none yet)
