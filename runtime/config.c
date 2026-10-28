@@ -41,6 +41,9 @@ Config g_config = {
     .village_in_hub = 1,
     .hp = {{1, 1, 1, 1}, 2},
     .mouse_sensitivity = 1.0f,
+    .camera_invert_horizontal = 0,
+    .camera_invert_vertical = 0,
+    .camera_smoothing = 0.5f,
     .mouse_buttons = {BTN_X, -1, BTN_A, -1, -1},
     .keyboard = {
         SDL_SCANCODE_1, SDL_SCANCODE_UP, SDL_SCANCODE_2, SDL_SCANCODE_RIGHT,
@@ -199,6 +202,11 @@ static const char DEFAULT_INI[] =
     "; Mouse look: click in the game window to capture the mouse (it then turns the camera, as the right stick), Esc\n"
     "; lets it go. Sensitivity: 1 = 0.06 degrees per mouse count; 0.5 slower, 2 faster (0.1 to 10).\n"
     "; The mouse turns the camera directly; the game's stick dead zone and camera speed do not apply.\n"
+    "; InvertHorizontal / InvertVertical: reverse the corresponding mouse-look axis. On or Off.\n"
+    "InvertHorizontal = Off\n"
+    "InvertVertical = Off\n"
+    "; Smoothing: 0.05 (smooth, slower response) to 1 (immediate response).\n"
+    "Smoothing = 0.5\n"
     "; Mouse buttons can be mapped to any Switch button\n"
     "; or None. The first click used to capture the mouse is not sent to the game.\n"
     "MouseSensitivity = 1.0\n"
@@ -489,6 +497,18 @@ static void set_key(const char *key, char *val, int line) {
     } else if (!strcmp(k, "mousesensitivity")) {
         float f = strtof(v, NULL);
         if ((ok = f >= 0.1f && f <= 10.0f)) g_config.mouse_sensitivity = f;
+    } else if (!strcmp(k, "inverthorizontal")) {
+        if (!strcmp(v, "on") || !strcmp(v, "1") || !strcmp(v, "true") || !strcmp(v, "yes")) g_config.camera_invert_horizontal = 1;
+        else if (!strcmp(v, "off") || !strcmp(v, "0") || !strcmp(v, "false") || !strcmp(v, "no")) g_config.camera_invert_horizontal = 0;
+        else ok = false;
+    } else if (!strcmp(k, "invertvertical")) {
+        if (!strcmp(v, "on") || !strcmp(v, "1") || !strcmp(v, "true") || !strcmp(v, "yes")) g_config.camera_invert_vertical = 1;
+        else if (!strcmp(v, "off") || !strcmp(v, "0") || !strcmp(v, "false") || !strcmp(v, "no")) g_config.camera_invert_vertical = 0;
+        else ok = false;
+    } else if (!strcmp(k, "smoothing")) {
+        char *end;
+        float f = strtof(v, &end);
+        if ((ok = end != v && !*end && f >= 0.05f && f <= 1.0f)) g_config.camera_smoothing = f;
     } else if (!strcmp(k, "port")) {
         int p = atoi(v);
         if (p > 0 && p < 65536) g_config.ldn_port = p;

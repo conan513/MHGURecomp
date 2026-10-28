@@ -52,7 +52,11 @@ const mouseBindings = [
 const movementBindingStart = keyboardBindings.findIndex(([id]) => id === 'keyStickUp');
 
 const controlIslands = [
-  { title: 'Mouse', fields: ['mouseSensitivity', ...mouseBindings.map(([id]) => id)] },
+  {
+    title: 'Mouse',
+    fields: ['mouseSensitivity', 'cameraSmoothing', 'cameraInvertHorizontal', 'cameraInvertVertical',
+      ...mouseBindings.map(([id]) => id)],
+  },
   {
     title: 'Keyboard',
     groups: [
@@ -174,6 +178,18 @@ const fieldInfo = {
     max: 10,
     step: 0.1,
   },
+  cameraSmoothing: {
+    label: 'Camera response',
+    kind: 'preset',
+    options: ['0.2', '0.35', '0.5', '0.7', '1.0'],
+    customType: 'number',
+    min: 0.05,
+    max: 1,
+    step: 0.05,
+    help: 'Lower values smooth movement more but respond more slowly; 1.0 responds immediately.',
+  },
+  cameraInvertHorizontal: { label: 'Invert horizontal look', kind: 'toggle' },
+  cameraInvertVertical: { label: 'Invert vertical look', kind: 'toggle' },
   mouseButton: {
     kind: 'select',
     options: [

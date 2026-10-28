@@ -466,6 +466,27 @@ const FIELDS: &[Field] = &[
     },
     Field {
         section: "Mouse",
+        key: "InvertHorizontal",
+        id: "cameraInvertHorizontal",
+        default: "Off",
+        kind: FieldKind::Toggle,
+    },
+    Field {
+        section: "Mouse",
+        key: "InvertVertical",
+        id: "cameraInvertVertical",
+        default: "Off",
+        kind: FieldKind::Toggle,
+    },
+    Field {
+        section: "Mouse",
+        key: "Smoothing",
+        id: "cameraSmoothing",
+        default: "0.5",
+        kind: FieldKind::Decimal(0.05, 1.0),
+    },
+    Field {
+        section: "Mouse",
         key: "LeftButton",
         id: "mouseLeftButton",
         default: "X",
@@ -1420,6 +1441,31 @@ mod tests {
         assert!(validate_settings(&settings).contains_key("aspectRatio"));
         settings["aspectRatio"] = json!("0");
         assert!(validate_settings(&settings).contains_key("aspectRatio"));
+        fs::remove_dir_all(directory).expect("clean temp directory");
+    }
+
+    #[test]
+    fn camera_settings_round_trip() {
+        let directory = temp_directory();
+        let mut settings = default_settings();
+        settings["mouseSensitivity"] = json!("1.5");
+        settings["cameraSmoothing"] = json!("0.7");
+        settings["cameraInvertHorizontal"] = json!("On");
+        settings["cameraInvertVertical"] = json!("On");
+        assert!(validate_settings(&settings).is_empty());
+
+        save_settings(&directory, &settings).expect("save camera settings");
+        let output = fs::read_to_string(ini_path(&directory)).expect("read camera settings");
+        assert!(output.contains("MouseSensitivity = 1.5"));
+        assert!(output.contains("[Mouse]\nInvertHorizontal = On"));
+        assert!(output.contains("InvertVertical = On"));
+        assert!(output.contains("Smoothing = 0.7"));
+
+        let loaded = read_settings(&directory).expect("reload camera settings");
+        assert_eq!(loaded["mouseSensitivity"], "1.5");
+        assert_eq!(loaded["cameraSmoothing"], "0.7");
+        assert_eq!(loaded["cameraInvertHorizontal"], "On");
+        assert_eq!(loaded["cameraInvertVertical"], "On");
         fs::remove_dir_all(directory).expect("clean temp directory");
     }
 

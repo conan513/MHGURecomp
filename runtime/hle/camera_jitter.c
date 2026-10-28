@@ -34,6 +34,8 @@
 #define CAM_FAR       0x30u
 #define CAM_NEAR      0x34u
 #define CAM_ASPECT    0x38u
+#define CAM_EYE       0x40u
+#define CAM_UP        0x50u
 #define CAM_TARGET    0x60u
 #define RING          64u
 
@@ -53,8 +55,6 @@ static float g_mouse_yaw, g_mouse_pitch;
 static float g_mouse_yaw_target, g_mouse_pitch_target;
 
 #define MOUSE_RAD_PER_COUNT (0.06f * 0.017453292519943295f)
-#define MOUSE_SMOOTH_ALPHA 0.5f
-
 static bool main_aspect(float a) {
     return fabsf(a - 16.0f / 9.0f) < 0.01f || fabsf(a - g_render_aspect) < 0.01f;
 }
@@ -67,33 +67,12 @@ static float halton(uint32_t i, uint32_t base) {
 
 static bool readable(uint32_t a, uint32_t n) { return a >= 0x1000u && a < 0xFFFFFFFFu - n && !(a & 3); }
 
-static bool mouse_orbit_view(float m[16], const float target[3], float yaw, float pitch) {
-    float r[3][3], out[3][3], eye[3];
-    for (int i = 0; i < 3; i++)
-        for (int j = 0; j < 3; j++) r[i][j] = m[i * 4 + j];
-    for (int i = 0; i < 3; i++)
-        eye[i] = -(m[12] * m[i * 4] + m[13] * m[i * 4 + 1] + m[14] * m[i * 4 + 2]);
-    float ox = eye[0] - target[0], oy = eye[1] - target[1], oz = eye[2] - target[2];
-    float radius = sqrtf(ox * ox + oy * oy + oz * oz);
-    if (!(radius > 1.0f) || !isfinite(radius)) return false;
-    float cy = cosf(yaw), sy = sinf(yaw), cp = cosf(pitch), sp = sinf(pitch);
-    const float rotate[3][3] = {{cy, sy * sp, -sy * cp}, {0, cp, sp}, {sy, -cy * sp, cy * cp}};
-    for (int i = 0; i < 3; i++)
-        for (int j = 0; j < 3; j++) {
-            out[i][j] = 0;
-            for (int k = 0; k < 3; k++) out[i][j] += r[i][k] * rotate[k][j];
-        }
-    for (int i = 0; i < 3; i++)
-        for (int j = 0; j < 3; j++) m[i * 4 + j] = out[i][j];
-    for (int i = 0; i < 3; i++) eye[i] = target[i] + radius * out[i][2];
-    for (int j = 0; j < 3; j++) m[12 + j] = -(eye[0] * out[0][j] + eye[1] * out[1][j] + eye[2] * out[2][j]);
-    return true;
-}
-
 static void lookat(Cpu *c) {
     uint32_t out = c->r[0], cam = c->r[1];
-    fnhook_call_original(c, FN_LOOKAT);
-    if (!readable(out, 64) || !readable(cam, 0x70) || !main_aspect(LDF(cam + CAM_ASPECT))) return;
+    if (!readable(out, 64) || !readable(cam, 0x70) || !main_aspect(LDF(cam + CAM_ASPECT))) {
+        fnhook_call_original(c, FN_LOOKAT);
+        return;
+    }
     pthread_mutex_lock(&g_lock);
     if (g_mouse_present != g_present_count) {
         float dx, dy;
@@ -104,23 +83,47 @@ static void lookat(Cpu *c) {
         }
         g_mouse_cam = cam;
         host_input_take_mouse_delta(&dx, &dy);
-        g_mouse_yaw_target += dx * g_config.mouse_sensitivity * MOUSE_RAD_PER_COUNT;
-        g_mouse_pitch_target += dy * g_config.mouse_sensitivity * MOUSE_RAD_PER_COUNT;
+        float invert_x = g_config.camera_invert_horizontal ? -1.0f : 1.0f;
+        float invert_y = g_config.camera_invert_vertical ? -1.0f : 1.0f;
+        g_mouse_yaw_target += dx * g_config.mouse_sensitivity * invert_x * MOUSE_RAD_PER_COUNT;
+        g_mouse_pitch_target += dy * g_config.mouse_sensitivity * invert_y * MOUSE_RAD_PER_COUNT;
         if (g_mouse_pitch_target > 1.2f) g_mouse_pitch_target = 1.2f;
         if (g_mouse_pitch_target < -1.2f) g_mouse_pitch_target = -1.2f;
-        g_mouse_yaw_target = remainderf(g_mouse_yaw_target, 6.28318531f);
-        g_mouse_yaw += (g_mouse_yaw_target - g_mouse_yaw) * MOUSE_SMOOTH_ALPHA;
-        g_mouse_pitch += (g_mouse_pitch_target - g_mouse_pitch) * MOUSE_SMOOTH_ALPHA;
+        g_mouse_yaw += remainderf(g_mouse_yaw_target - g_mouse_yaw, 6.28318531f) * g_config.camera_smoothing;
+        g_mouse_pitch += (g_mouse_pitch_target - g_mouse_pitch) * g_config.camera_smoothing;
         if (g_mouse_pitch > 1.2f) g_mouse_pitch = 1.2f;
         if (g_mouse_pitch < -1.2f) g_mouse_pitch = -1.2f;
         g_mouse_yaw = remainderf(g_mouse_yaw, 6.28318531f);
     }
+    float target[3] = {LDF(cam + CAM_TARGET), LDF(cam + CAM_TARGET + 4), LDF(cam + CAM_TARGET + 8)};
+    float eye[3] = {LDF(cam + CAM_EYE), LDF(cam + CAM_EYE + 4), LDF(cam + CAM_EYE + 8)};
+    float up[3] = {LDF(cam + CAM_UP), LDF(cam + CAM_UP + 4), LDF(cam + CAM_UP + 8)};
+    float delta[3] = {eye[0] - target[0], eye[1] - target[1], eye[2] - target[2]};
+    float radius = sqrtf(delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]);
+    if (g_mouse_cam == cam) {
+        if (radius > 1.0f && isfinite(radius)) {
+            float azimuth = atan2f(delta[0], delta[2]) - g_mouse_yaw;
+            float elevation = asinf(fmaxf(-1.0f, fminf(1.0f, delta[1] / radius))) + g_mouse_pitch;
+            if (elevation > 1.2f) elevation = 1.2f;
+            if (elevation < -1.2f) elevation = -1.2f;
+            float horizontal = cosf(elevation) * radius;
+            STF(cam + CAM_EYE, target[0] + sinf(azimuth) * horizontal);
+            STF(cam + CAM_EYE + 4, target[1] + sinf(elevation) * radius);
+            STF(cam + CAM_EYE + 8, target[2] + cosf(azimuth) * horizontal);
+            STF(cam + CAM_UP, 0.0f);
+            STF(cam + CAM_UP + 4, 1.0f);
+            STF(cam + CAM_UP + 8, 0.0f);
+        }
+    }
+    fnhook_call_original(c, FN_LOOKAT);
     float view[16];
     memcpy(view, G2H(out), 64);
-    if (g_mouse_cam == cam) {
-        float target[3] = {LDF(cam + CAM_TARGET), LDF(cam + CAM_TARGET + 4), LDF(cam + CAM_TARGET + 8)};
-        mouse_orbit_view(view, target, g_mouse_yaw, g_mouse_pitch);
-    }
+    STF(cam + CAM_EYE, eye[0]);
+    STF(cam + CAM_EYE + 4, eye[1]);
+    STF(cam + CAM_EYE + 8, eye[2]);
+    STF(cam + CAM_UP, up[0]);
+    STF(cam + CAM_UP + 4, up[1]);
+    STF(cam + CAM_UP + 8, up[2]);
     memcpy(G2H(out), view, 64);
     int i = 0;
     while (i < g_nviews && g_views[i].cam != cam) i++;
@@ -182,6 +185,13 @@ void camjit_set(bool on, uint32_t render_w, uint32_t render_h, uint32_t phases) 
     if (render_w && render_h) g_rw = render_w, g_rh = render_h;
     if (phases) g_phases = phases;
     pthread_mutex_unlock(&g_lock);
+}
+
+float camjit_mouse_yaw(void) {
+    pthread_mutex_lock(&g_lock);
+    float yaw = g_mouse_yaw;
+    pthread_mutex_unlock(&g_lock);
+    return yaw;
 }
 
 bool camjit_latest(CamRecord *out) {
