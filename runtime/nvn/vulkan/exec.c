@@ -744,6 +744,10 @@ static NvnTexture *dump_tex, *dump_depth;
 static NvnTexture *present_depth;
 static uint64_t present_depth_area;
 static bool present_loading;
+static bool present_ssao_applied;
+static VkPipelineLayout ssao_layout;
+static VkDescriptorSetLayout ssao_set_layout;
+static void ssao_apply_scene(NvnTexture *color, NvnTexture *depth);
 static uint32_t dump_lv, dump_ly;
 
 static void dump_pass(void) {
@@ -2524,6 +2528,26 @@ static bool fxaa_skipped(Prog *pr) {
     return true;
 }
 
+static void ssao_before_ui_draw(void) {
+    if (st.ds[0] || !st.ubuf[0][0].addr || !guest_range_ok(st.ubuf[0][0].addr, 64)) return;
+    float ui[16];
+    memcpy(ui, G2H((uint32_t)st.ubuf[0][0].addr), sizeof ui);
+    float pos_x = ui[12], pos_y = ui[13], pos_z = ui[14];
+    bool ui_layer = pos_z >= 94.0f && pos_z <= 110.0f && fabsf(pos_z - roundf(pos_z)) < 0.01f &&
+                    pos_x >= -64.0f && pos_x <= (float)g_ui_size[0] + 64.0f && pos_y >= -64.0f && pos_y <= 784.0f;
+    if (!ui_layer) return;
+    bool fullscreen = (fabsf(ui[12] - 640.0f) < 1.0f && fabsf(pos_y - 360.0f) < 1.0f &&
+                       (fabsf(ui[0]) >= 1200.0f || fabsf(ui[5]) >= 700.0f)) ||
+                      (fabsf(ui[12]) <= 1.0f && fabsf(pos_y) <= 1.0f);
+    if (fabsf(pos_z - 110.0f) < 0.5f &&
+        (fabsf(pos_y - 168.0f) < 0.3f || fabsf(pos_y - 433.0f) < 0.3f || fabsf(pos_y - 570.0f) < 0.3f ||
+         fullscreen)) {
+        ui_loading_pass = present_loading = true;
+    }
+    if (!present_loading && st.rt.ncolor && st.rt.color[0] && !g_fsr_on)
+        ssao_apply_scene(st.rt.color[0], present_depth);
+}
+
 static void draw(CmdRec *r, bool indexed) {
     if (!st.program) { stat_skipped++; return; }
     ShaderKey vkey = {0}, fkey = {0};
@@ -2542,6 +2566,7 @@ static void draw(CmdRec *r, bool indexed) {
     bool native = topology(mode, &topo);
     if (!native && mode != 6 && mode != 7 && mode != 9) { stat_skipped++; return; }
 
+    ssao_before_ui_draw();
     if (g_fsr_on) {
         FsrDraw fd = {.color0 = st.rt.ncolor ? st.rt.color[0] : NULL, .depth = st.rt.depth, .count = (uint32_t)r->x[2],
                       .depth_write = st.ds[0] && st.ds[1], .vubuf = &st.ubuf[0][0].addr, .nvubuf = 18};
@@ -3031,8 +3056,10 @@ VkImageView vk_present_depth(uint32_t *width, uint32_t *height) {
     present_depth = NULL;
     present_depth_area = 0;
     bool loading = present_loading;
+    bool ssao_applied = present_ssao_applied;
     present_loading = false;
-    if (!g_config.ssao || loading || !t || !t->backend) return VK_NULL_HANDLE;
+    present_ssao_applied = false;
+    if (!g_config.ssao || loading || ssao_applied || !t || !t->backend) return VK_NULL_HANDLE;
     TexBackend *b = t->backend;
     if (!(b->aspect & VK_IMAGE_ASPECT_DEPTH_BIT) || !b->width || !b->height) return VK_NULL_HANDLE;
     vk_ms_resolve(b);
@@ -3041,6 +3068,106 @@ VkImageView vk_present_depth(uint32_t *width, uint32_t *height) {
     *width = b->width;
     *height = b->height;
     return view;
+}
+
+static VkPipeline ssao_pipeline(VkRenderPass rp) {
+    static VkPipeline p;
+    static VkRenderPass made_for;
+    if (p && made_for == rp) return p;
+    if (!ssao_layout) {
+        VkDescriptorSetLayoutBinding b = {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL};
+        VkDescriptorSetLayoutCreateInfo li = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                                              .bindingCount = 1, .pBindings = &b};
+        VK_CHECK(vkCreateDescriptorSetLayout(g_vk.dev, &li, NULL, &ssao_set_layout));
+        VkPushConstantRange range = {VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 32};
+        VkPipelineLayoutCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                                         .setLayoutCount = 1, .pSetLayouts = &ssao_set_layout,
+                                         .pushConstantRangeCount = 1, .pPushConstantRanges = &range};
+        VK_CHECK(vkCreatePipelineLayout(g_vk.dev, &ci, NULL, &ssao_layout));
+    }
+    VkPipelineShaderStageCreateInfo stages[2] = {
+        {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_VERTEX_BIT,
+         .module = vk_builtin_shader("ssao.vert"), .pName = "main"},
+        {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+         .module = vk_builtin_shader("ssao.frag"), .pName = "main"}};
+    VkPipelineVertexInputStateCreateInfo vi = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+    VkPipelineInputAssemblyStateCreateInfo ia = {.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                                                 .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+    VkPipelineViewportStateCreateInfo vs = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+                                            .viewportCount = 1, .scissorCount = 1};
+    VkPipelineRasterizationStateCreateInfo rs = {.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+                                                 .polygonMode = VK_POLYGON_MODE_FILL, .lineWidth = 1};
+    VkPipelineMultisampleStateCreateInfo ms = {.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+                                               .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT};
+    VkPipelineDepthStencilStateCreateInfo ds = {.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
+    VkPipelineColorBlendAttachmentState attachment = {
+        .blendEnable = VK_TRUE, .srcColorBlendFactor = VK_BLEND_FACTOR_ZERO,
+        .dstColorBlendFactor = VK_BLEND_FACTOR_SRC_COLOR, .colorBlendOp = VK_BLEND_OP_ADD,
+        .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE, .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+        .alphaBlendOp = VK_BLEND_OP_ADD,
+        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT};
+    VkPipelineColorBlendStateCreateInfo cb = {.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+                                              .attachmentCount = 1, .pAttachments = &attachment};
+    VkDynamicState dyn[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    VkPipelineDynamicStateCreateInfo dy = {.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+                                           .dynamicStateCount = 2, .pDynamicStates = dyn};
+    VkGraphicsPipelineCreateInfo pi = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, .stageCount = 2,
+                                       .pStages = stages, .pVertexInputState = &vi, .pInputAssemblyState = &ia,
+                                       .pViewportState = &vs, .pRasterizationState = &rs, .pMultisampleState = &ms,
+                                       .pDepthStencilState = &ds, .pColorBlendState = &cb, .pDynamicState = &dy,
+                                       .layout = ssao_layout, .renderPass = rp};
+    VK_CHECK(vkCreateGraphicsPipelines(g_vk.dev, g_vk.pcache, 1, &pi, NULL, &p));
+    made_for = rp;
+    return p;
+}
+
+static void ssao_apply_scene(NvnTexture *color, NvnTexture *depth) {
+    if (!g_config.ssao || present_loading || present_ssao_applied || !color || !depth) return;
+    TexBackend *cb = vk_tex(color, true), *db = vk_tex(depth, false);
+    if (!cb || !db || cb->width != db->width || cb->height != db->height || !cb->width || !cb->height) return;
+    vk_end_pass();
+    vk_ms_resolve(cb);
+    vk_ms_resolve(db);
+    VkImageView cv = vk_view(color, NULL, false, true, TEXTYPE_2D);
+    VkImageView dv = vk_view(depth, NULL, false, false, TEXTYPE_2D);
+    if (!cv || !dv) return;
+    VkFormat format = cb->format;
+    VkRenderPass rp = vk_render_pass(&format, 1, VK_FORMAT_UNDEFINED, 1);
+    VkPipeline p = ssao_pipeline(rp);
+    VkImageView views[1] = {cv};
+    VkFramebuffer fb = vk_framebuffer(rp, views, 1, cb->width, cb->height);
+    VkDescriptorSet set = vk_alloc_set(ssao_set_layout);
+    VkDescriptorImageInfo ii = {vk_default_sampler(false), dv, VK_IMAGE_LAYOUT_GENERAL};
+    VkWriteDescriptorSet w = {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = set, .dstBinding = 0,
+                              .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                              .pImageInfo = &ii};
+    vkUpdateDescriptorSets(g_vk.dev, 1, &w, 0, NULL);
+    VkCommandBuffer cmd = vk_cmd();
+    vk_full_barrier(cmd);
+    VkRect2D area = {{0, 0}, {cb->width, cb->height}};
+    VkRenderPassBeginInfo bi = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, .renderPass = rp,
+                                .framebuffer = fb, .renderArea = area};
+    vkCmdBeginRenderPass(cmd, &bi, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, p);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ssao_layout, 0, 1, &set, 0, NULL);
+    float near_plane = 8.0f, far_plane = 50000.0f;
+    CamRecord camera;
+    if (camjit_latest(&camera) && camera.near_plane > 0.0f && camera.far_plane > camera.near_plane)
+        near_plane = camera.near_plane, far_plane = camera.far_plane;
+    float pc[8] = {nvn_window_origin() == 0 ? 1.0f : 0.0f, 0, 0, 0, 0, near_plane, far_plane, 50.0f};
+    vkCmdPushConstants(cmd, ssao_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof pc, pc);
+    VkViewport vp = {0, 0, (float)cb->width, (float)cb->height, 0, 1};
+    vkCmdSetViewport(cmd, 0, 1, &vp);
+    vkCmdSetScissor(cmd, 0, 1, &area);
+    vkCmdDraw(cmd, 3, 1, 0, 0);
+    vkCmdEndRenderPass(cmd);
+    vk_full_barrier(cmd);
+    ss_forget();
+    present_ssao_applied = true;
+}
+
+void vk_ssao_apply_scene(NvnTexture *color, NvnTexture *depth) {
+    ssao_apply_scene(color, depth);
 }
 
 void vk_present_depth_forget(NvnTexture *t) {

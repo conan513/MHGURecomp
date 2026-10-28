@@ -229,6 +229,49 @@ VkDescriptorSetLayout vk_set_layout(const VkBindingInfo *b, int n, uint32_t set,
 
 // ================================================================== built-in shaders
 static const char *builtin_src(const char *name, int *stage) {
+    if (!strcmp(name, "ssao.vert")) {
+        *stage = STAGE_VERTEX;
+        return "#version 450\n"
+               "layout(push_constant) uniform P { vec4 orient; vec4 ao; } pc;\n"
+               "layout(location = 0) out vec2 uv;\n"
+               "void main() {\n"
+               "  vec2 p = vec2((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);\n"
+               "  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);\n"
+               "  uv = vec2(p.x, pc.orient.x > 0.5 ? 1.0 - p.y : p.y);\n"
+               "}\n";
+    }
+    if (!strcmp(name, "ssao.frag")) {
+        *stage = STAGE_FRAGMENT;
+        return "#version 450\n"
+               "layout(set = 0, binding = 0) uniform sampler2D d;\n"
+               "layout(push_constant) uniform P { vec4 orient; vec4 ao; } pc;\n"
+               "layout(location = 0) in vec2 uv;\n"
+               "layout(location = 0) out vec4 o;\n"
+               "float linear_depth(float z, float n, float f) { return n * f / max(f - z * (f - n), 1e-6); }\n"
+               "void main() {\n"
+               "  float center_z = texture(d, uv).r;\n"
+               "  float center = linear_depth(center_z, pc.ao.y, pc.ao.z);\n"
+               "  float skybox = smoothstep(0.999, 1.0, center_z);\n"
+               "  vec2 texel = 1.0 / vec2(textureSize(d, 0));\n"
+               "  vec2 dirs[12] = vec2[12](vec2(1,0), vec2(0.8660,0.5), vec2(0.5,0.8660),\n"
+               "                           vec2(0,1), vec2(-0.5,0.8660), vec2(-0.8660,0.5),\n"
+               "                           vec2(-1,0), vec2(-0.8660,-0.5), vec2(-0.5,-0.8660),\n"
+               "                           vec2(0,-1), vec2(0.5,-0.8660), vec2(0.8660,-0.5));\n"
+               "  float occlusion = 0.0;\n"
+               "  float radius = pc.ao.w;\n"
+               "  for (int i = 0; i < 12; ++i) {\n"
+               "    float sample_z = texture(d, uv + dirs[i] * texel * 5.0).r;\n"
+               "    float sample_depth = linear_depth(sample_z, pc.ao.y, pc.ao.z);\n"
+               "    float separation = center - sample_depth;\n"
+               "    float falloff = 1.0 - smoothstep(radius * 0.65, radius, separation);\n"
+               "    float scene_occlusion = smoothstep(2.0, 10.0, separation) * falloff;\n"
+               "    float skybox_occlusion = 1.0 - smoothstep(0.999, 1.0, sample_z);\n"
+               "    occlusion += mix(scene_occlusion, skybox_occlusion, skybox);\n"
+               "  }\n"
+               "  float visibility = 1.0 - min(occlusion * 0.028, 0.30);\n"
+               "  o = vec4(visibility, visibility, visibility, 1.0);\n"
+               "}\n";
+    }
     if (!strcmp(name, "present.vert")) {
         *stage = STAGE_VERTEX;
         // pv[0].x: flip (lower-left origin), pv[1]: uv crop (origin, size). Fullscreen triangle; Vulkan NDC y points down.

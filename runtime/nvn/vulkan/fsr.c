@@ -1482,6 +1482,7 @@ static void hud_start(const char *why) {
     CamRecord cam;
     bool have_cam = frame_camera(&cam);
     bool scene = depth && dn >= 16 && have_cam;
+    if (depth && dn >= 16 && g_config.ssao) vk_ssao_apply_scene(g_h, depth);
     frame_fsr = scene && run_fsr(g_h, hs, depth, frame_mask(), &cam);
     if (!frame_fsr) scale_to_stand(g_h, hs);
     {  // every change between FSR and plain scaling, with the reason (always logged; at most 500 lines)
