@@ -11,11 +11,12 @@ typedef struct {
     float jitter[2];           // the jitter put into this capture's projection: picture shift in render pixels, x right,
                                // y down (0, 0: none)
     float gpu8, gpu9;          // the projection's m[8], m[9] as written (jitter in): found again in the GPU's data
-    float near, far, fovy;     // clip planes (world units), vertical field of view (radians)
+    float near_plane, far_plane, fovy; // clip planes (world units), vertical field of view (radians)
     uint32_t cam;              // the camera object (guest address)
 } CamRecord;
 
-void camjit_init(void);  // hooks (only with [Upscaler] FSR = On)
+void camjit_init(void);  // camera view hook for mouse look, FSR and SSAO
+float camjit_mouse_yaw(void);  // smoothed mouse-look yaw offset for camera-relative movement
 // Renderer: jitter on or off from the next capture on, the 3D render size and the Halton sequence's length.
 void camjit_set(bool on, uint32_t render_w, uint32_t render_h, uint32_t phases);
 bool camjit_latest(CamRecord *out);              // the newest capture (false: none yet)

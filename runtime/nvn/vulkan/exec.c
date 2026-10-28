@@ -23,6 +23,7 @@
 #endif
 
 #include "../../kernel.h"
+#include "../../camera_jitter.h"
 #include "fsr.h"
 #include "shaders.h"
 #include "vk.h"
@@ -2750,8 +2751,6 @@ static void texture_info(int stage, ShaderInfo *si, int i, VkDescriptorImageInfo
     *out = (VkDescriptorImageInfo){smp, view, VK_IMAGE_LAYOUT_GENERAL};
 }
 
-static int32_t fsr_cap_base;
-
 // Writes the descriptor set of one stage. gx..gz: compute group counts (driver constants).
 static VkDescriptorSet stage_set(int nbinds, const VkBindingInfo *binds, VkDescriptorSetLayout layout, uint32_t set, int stage,
                                  ShaderInfo *si, uint32_t gx, uint32_t gy, uint32_t gz) {
@@ -2966,6 +2965,26 @@ static bool movie_viewport(NvnTexture *y, const float *vp, float out[4]) {
     return true;
 }
 
+static void ssao_before_ui_draw(void) {
+    if (st.ds[0] || !st.ubuf[0][0].addr || !guest_range_ok(st.ubuf[0][0].addr, 64)) return;
+    float ui[16];
+    memcpy(ui, G2H((uint32_t)st.ubuf[0][0].addr), sizeof ui);
+    float pos_x = ui[12], pos_y = ui[13], pos_z = ui[14];
+    bool ui_layer = pos_z >= 94.0f && pos_z <= 110.0f && fabsf(pos_z - roundf(pos_z)) < 0.01f &&
+                    pos_x >= -64.0f && pos_x <= (float)g_ui_size[0] + 64.0f && pos_y >= -64.0f && pos_y <= 784.0f;
+    if (!ui_layer) return;
+    bool fullscreen = (fabsf(pos_x - 640.0f) < 1.0f && fabsf(pos_y - 360.0f) < 1.0f &&
+                       (fabsf(ui[0]) >= 1200.0f || fabsf(ui[5]) >= 700.0f)) ||
+                      (fabsf(pos_x) <= 1.0f && fabsf(pos_y) <= 1.0f);
+    if (fabsf(pos_z - 110.0f) < 0.5f &&
+        (fabsf(pos_y - 168.0f) < 0.3f || fabsf(pos_y - 433.0f) < 0.3f || fabsf(pos_y - 570.0f) < 0.3f ||
+         fullscreen)) {
+        ui_loading_pass = present_loading = true;
+    }
+    if (!present_loading && st.rt.ncolor && st.rt.color[0] && !g_fsr_on)
+        ssao_apply_scene(st.rt.color[0], present_depth);
+}
+
 static void draw(CmdRec *r, bool indexed) {
     if (!st.program) { stat_skipped++; return; }
     ShaderKey vkey = {0}, fkey = {0};
@@ -2992,13 +3011,6 @@ static void draw(CmdRec *r, bool indexed) {
     }
 
     ssao_before_ui_draw();
-    if (g_fsr_on) {
-        FsrDraw fd = {.color0 = st.rt.ncolor ? st.rt.color[0] : NULL, .depth = st.rt.depth, .count = (uint32_t)r->x[2],
-                      .depth_write = st.ds[0] && st.ds[1], .vubuf = &st.ubuf[0][0].addr, .nvubuf = 18};
-        for (int i = 0; i < pr->fi->ntex && fd.ntex < 16; i++)
-            fd.tex[fd.ntex++] = shader_texture_object(1, &pr->fi->tex[i]);
-        vk_fsr_draw(&fd);
-    }
     if (st.rt_dirty) vk_end_pass();  // (MSAA: the ending pass marks its targets for resolving before they are read)
     ms_resolve_sampled(0, pr->vi);
     ms_resolve_sampled(1, pr->fi);

@@ -1,6 +1,7 @@
 // Host-only persistence regression test. No game files or live save are used.
 // clang -Iruntime tests/test_settings.c runtime/config.c runtime/config_store.c -lSDL3 -o test-settings.exe
 #include "config.h"
+#include "hle/input.h"
 #include "menu_confirm.h"
 #include "settings_locale.h"
 #include <SDL3/SDL.h>
@@ -29,6 +30,9 @@ int main(int argc, char **argv) {
     fputs("; Keep this comment\r\n[Display]\r\nMode = Borderless Window\r\nResolution = Desktop\r\nRenderResolution = Auto\r\n"
           "AspectRatio = 21:9\r\nFOV = 1.1 ; camera comment\r\n"
           "[Performance]\r\nFPS = 60\r\nFrameRate = 60\r\n[Monster HP]\r\nQuest101 = 0.6\r\nQuest102 = 1, 2, 3, 4\r\n"
+          "[Anti-aliasing]\r\nSSAO = On\r\n[Controls]\r\nRumble = Off\r\n"
+          "[Mouse]\r\nInvertHorizontal = On\r\nInvertVertical = On\r\nSmoothing = 0.75\r\nLeftButton = B\r\n"
+          "[Keyboard]\r\nButtonA = Return\r\n"
           "[Future section]\r\nFutureOption = preserve-me", f);
     fclose(f);
     set_env("MHGU_CONFIG", path);
@@ -36,8 +40,20 @@ int main(int argc, char **argv) {
     set_env("MHGU_FOV", "1.6");
     set_env("MHGU_FRAMERATE", "144.5");
     Config initial = g_config;
+    Config defaults = config_defaults();
+    assert(defaults.ssao == 0 && defaults.controller_rumble == 1);
+    assert(defaults.camera_smoothing == 0.5f && defaults.mouse_buttons[MOUSE_LEFT] == BTN_X);
+    assert(defaults.keyboard[KEY_BUTTON_A] == SDL_SCANCODE_F);
+    assert(config_parse(config_setting("SSAO"), "On", &defaults) && defaults.ssao);
+    assert(config_parse(config_setting("Rumble"), "Off", &defaults) && !defaults.controller_rumble);
+    assert(config_parse(config_setting("Smoothing"), "0.75", &defaults));
+    assert(fabsf(defaults.camera_smoothing - 0.75f) < 0.001f);
+    set_env("MHGU_SSAO", "1");
     config_load();
     Config c = config_editable();
+    assert(c.ssao && !c.controller_rumble && c.camera_invert_horizontal && c.camera_invert_vertical);
+    assert(fabsf(c.camera_smoothing - 0.75f) < 0.001f);
+    assert(c.mouse_buttons[MOUSE_LEFT] == BTN_B && c.keyboard[KEY_BUTTON_A] == SDL_SCANCODE_RETURN);
     assert(c.width == 0 && c.height == 0 && c.render_w == 0 && c.render_h == 0);
     assert(fabsf(c.fov - 1.1f) < 0.001f);
     assert(g_config.width == 900 && fabsf(g_config.fov - 1.6f) < 0.001f);
@@ -78,6 +94,8 @@ int main(int argc, char **argv) {
     // Unchanged values keep the player's spelling; changed numbers are written short.
     assert(strstr(text, "Mode = Borderless Window\r\n") && strstr(text, "AspectRatio = 21:9\r\n"));
     assert(strstr(text, "FOV = 1.2 ; camera comment") && strstr(text, "MouseSensitivity = 2.5\r\n"));
+    assert(strstr(text, "SSAO = On") && strstr(text, "Rumble = Off"));
+    assert(strstr(text, "InvertHorizontal = On") && strstr(text, "Smoothing = 0.75"));
     assert(!strstr(text, "Quest101 ="));
     assert(strstr(text, "Quest102 = 1, 2, 3, 4"));
     assert(strstr(text, "FPS = 120") && strstr(text, "FrameRate = 120"));

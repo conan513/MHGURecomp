@@ -497,13 +497,13 @@ static void mouse_update(void) {
     mouse_look_dx += mouse_dx, mouse_look_dy += mouse_dy;
     pthread_mutex_unlock(&mouse_look_lock);
     mouse_dx = mouse_dy = 0;
-    if (!mouse_captured && now >= test_until) vx = vy = 0;
-    float s = config_live_mouse_sensitivity() / MOUSE_FULL_SPEED;
-    float x = vx * s, y = -vy * s;  // (the mouse's y is down, the stick's up)
-    float m = sqrtf(x * x + y * y);
-    if (m < 0.02f) return;
-    float t = (MOUSE_DEADZONE + (1.0f - MOUSE_DEADZONE) * (m > 1.0f ? 1.0f : m)) / m;
-    *rx += (int)(x * t * 32767.0f), *ry += (int)(y * t * 32767.0f);
+}
+
+void host_input_take_mouse_delta(float *dx, float *dy) {
+    pthread_mutex_lock(&mouse_look_lock);
+    *dx = mouse_look_dx, *dy = mouse_look_dy;
+    mouse_look_dx = mouse_look_dy = 0;
+    pthread_mutex_unlock(&mouse_look_lock);
 }
 
 // The game's rumble (input_rumble) to the controller: on a change, at most every 16 ms (the game sends a value every

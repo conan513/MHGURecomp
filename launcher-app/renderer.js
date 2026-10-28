@@ -79,8 +79,8 @@ const controlIslands = [
 const categoryFields = {
   display: ['mode', 'resolution', 'renderResolution', 'aspectRatio', 'fov', 'uiAnchor'],
   graphics: [
-    'msaa', 'fxaa', 'ssao', 'fsr', 'fsrQuality', 'fsrSharpness',
-    'fsrObjectMotion', 'fsrReactive', 'fsrAnimSurf', 'fps', 'vsync',
+    'msaa', 'fxaa', 'ssao', 'fsr', 'fsrUpscaler', 'fsrQuality', 'fsrSharpness',
+    'fsrObjectMotion', 'fsrReactive', 'fsrAnimSurf', 'fps', 'vsync', 'shaderPrewarm',
   ],
   controller: ['faceButtons', 'backgroundInput', 'rumble'],
   keyboardMouse: [],
@@ -133,7 +133,8 @@ const fieldInfo = {
   msaa: { label: 'MSAA', kind: 'select', options: ['Off', '2x', '4x', '8x'], help: 'Multisample anti-aliasing.' },
   fxaa: { label: 'FXAA', kind: 'toggle', help: 'A lightweight post-processing anti-aliasing pass.' },
   ssao: { label: 'SSAO', kind: 'toggle', help: 'Experimental depth-aware contact shadows, including around skybox edges. Needs scene depth, so flat 2D loading screens are unaffected; may reduce performance.' },
-  fsr: { label: 'FSR 3.1', kind: 'toggle', help: 'Temporal upscaling. Renders the 3D scene at a lower resolution and reconstructs it at the output resolution; the HUD stays full resolution. MSAA and FXAA are disabled while FSR is active.' },
+  fsr: { label: 'FSR', kind: 'toggle', help: 'Temporal upscaling. Renders the 3D scene at a lower resolution and reconstructs it at the output resolution; the HUD stays full resolution. MSAA and FXAA are disabled while FSR is active.' },
+  fsrUpscaler: { label: 'Upscaler', kind: 'select', options: [{ label: 'FSR 3.1', value: 'FSR3' }, { label: 'FSR 4', value: 'FSR4' }], help: 'FSR 4 requires a supported RDNA 4 GPU and compatible AMD driver on Windows. FSR 3.1 is used if FSR 4 cannot start.' },
   fsrQuality: { label: 'FSR quality', kind: 'select', options: ['NativeAA', 'Quality', 'Balanced', 'Performance', 'UltraPerformance'], help: 'Higher quality renders closer to the output resolution; Performance modes render faster but look softer.' },
   fsrSharpness: { label: 'FSR sharpness', kind: 'number', min: 0, max: 1, step: 0.1, help: 'Sharpening strength, from off to strongest.' },
   fsrObjectMotion: { label: 'Object motion vectors', kind: 'toggle', help: 'Tracks moving characters and monsters to reduce temporal ghosting. Can be disabled if it causes issues.' },
@@ -150,6 +151,7 @@ const fieldInfo = {
     suffix: 'FPS',
   },
   vsync: { label: 'VSync', kind: 'toggle', help: 'Synchronize frames with your display refresh.' },
+  shaderPrewarm: { label: 'Shader prewarm', kind: 'toggle', help: 'Translate game shaders in the background at startup to reduce first-use stutter. Initial startup takes longer and uses additional shader cache space.' },
   faceButtons: {
     label: 'Face button mapping',
     kind: 'select',

@@ -124,6 +124,13 @@ const FIELDS: &[Field] = &[
     },
     Field {
         section: "Upscaler",
+        key: "Upscaler",
+        id: "fsrUpscaler",
+        default: "FSR3",
+        kind: FieldKind::Select(&["FSR3", "FSR4"]),
+    },
+    Field {
+        section: "Upscaler",
         key: "FSRQuality",
         id: "fsrQuality",
         default: "NativeAA",
@@ -174,6 +181,13 @@ const FIELDS: &[Field] = &[
         section: "Performance",
         key: "VSync",
         id: "vsync",
+        default: "On",
+        kind: FieldKind::Toggle,
+    },
+    Field {
+        section: "Performance",
+        key: "ShaderPrewarm",
+        id: "shaderPrewarm",
         default: "On",
         kind: FieldKind::Toggle,
     },
@@ -538,7 +552,7 @@ const FIELDS: &[Field] = &[
         section: "Multiplayer",
         key: "SyncSmallMonsters",
         id: "syncSmallMonsters",
-        default: "On",
+        default: "Off",
         kind: FieldKind::Toggle,
     },
     Field {
@@ -1384,6 +1398,7 @@ mod tests {
         let directory = temp_directory();
         let mut settings = default_settings();
         settings["fsr"] = json!("On");
+        settings["fsrUpscaler"] = json!("FSR4");
         settings["fsrQuality"] = json!("Balanced");
         settings["fsrSharpness"] = json!("0.5");
         settings["fsrObjectMotion"] = json!("Off");
@@ -1395,6 +1410,7 @@ mod tests {
         let output = fs::read_to_string(ini_path(&directory)).expect("read updated ini");
         assert!(output.contains("[Upscaler]"));
         assert!(output.contains("FSR = On"));
+        assert!(output.contains("Upscaler = FSR4"));
         assert!(output.contains("FSRQuality = Balanced"));
         assert!(output.contains("Sharpness = 0.5"));
         assert!(output.contains("ObjectMotion = Off"));
@@ -1402,6 +1418,7 @@ mod tests {
         assert!(output.contains("AnimSurf = Off"));
         let loaded = read_settings(&directory).expect("reload settings");
         assert_eq!(loaded["fsr"], "On");
+        assert_eq!(loaded["fsrUpscaler"], "FSR4");
         assert_eq!(loaded["fsrQuality"], "Balanced");
         assert_eq!(loaded["fsrSharpness"], "0.5");
         assert_eq!(loaded["fsrObjectMotion"], "Off");
@@ -1410,6 +1427,29 @@ mod tests {
 
         settings["fsrSharpness"] = json!("1.1");
         assert!(validate_settings(&settings).contains_key("fsrSharpness"));
+        settings["fsrSharpness"] = json!("0.5");
+        settings["fsrUpscaler"] = json!("FSR5");
+        assert!(validate_settings(&settings).contains_key("fsrUpscaler"));
+        fs::remove_dir_all(directory).expect("clean temp directory");
+    }
+
+    #[test]
+    fn shader_prewarm_and_small_monster_defaults_match_runtime() {
+        let directory = temp_directory();
+        let mut settings = default_settings();
+        assert_eq!(settings["shaderPrewarm"], "On");
+        assert_eq!(settings["syncSmallMonsters"], "Off");
+        settings["shaderPrewarm"] = json!("Off");
+        settings["syncSmallMonsters"] = json!("On");
+        assert!(validate_settings(&settings).is_empty());
+
+        save_settings(&directory, &settings).expect("save performance and multiplayer settings");
+        let output = fs::read_to_string(ini_path(&directory)).expect("read updated ini");
+        assert!(output.contains("ShaderPrewarm = Off"));
+        assert!(output.contains("SyncSmallMonsters = On"));
+        let loaded = read_settings(&directory).expect("reload settings");
+        assert_eq!(loaded["shaderPrewarm"], "Off");
+        assert_eq!(loaded["syncSmallMonsters"], "On");
         fs::remove_dir_all(directory).expect("clean temp directory");
     }
 
@@ -1457,7 +1497,7 @@ mod tests {
         save_settings(&directory, &settings).expect("save camera settings");
         let output = fs::read_to_string(ini_path(&directory)).expect("read camera settings");
         assert!(output.contains("MouseSensitivity = 1.5"));
-        assert!(output.contains("[Mouse]\nInvertHorizontal = On"));
+        assert!(output.contains("[Mouse]\nMouseSensitivity = 1.5\nInvertHorizontal = On"));
         assert!(output.contains("InvertVertical = On"));
         assert!(output.contains("Smoothing = 0.7"));
 

@@ -61,6 +61,7 @@ static inline const char *settings_text(int language, const char *english) {
         {"Resolution must be Desktop/Auto or 320x180 to 16384x16384.", "La resolución debe ser automática o entre 320x180 y 16384x16384."},
         {"Aspect ratio must be Auto or between 0.5 and 10.", "La relación de aspecto debe ser automática o entre 0.5 y 10."},
         {"FOV must be 0.5-2.0 and mouse sensitivity 0.1-10.", "El FOV debe ser de 0.5 a 2.0 y la sensibilidad de 0.1 a 10."},
+        {"Mouse smoothing must be 0.05-1.", "El suavizado del ratón debe estar entre 0.05 y 1."},
         {"Invalid frame cap, anti-aliasing, controller, HUD or volume setting.", "Valor no válido de FPS, suavizado, mando, HUD o volumen."},
         {"Invalid On/Off value.", "Valor de activación no válido."},
         {"Invalid port or Join address list (no newlines, ';' or '#').", "Puerto o direcciones no válidos (sin saltos de línea, ';' ni '#')."},

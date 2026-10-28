@@ -14,6 +14,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "../../camera_jitter.h"
 #include "../../overlay.h"
 #include "fsr.h"
 #include "fsr4.h"

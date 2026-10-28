@@ -20,9 +20,30 @@
 #include "hle/input.h"
 #include "rt.h"
 
-#define CONFIG_DEFAULT_VALUES DISPLAY_BORDERLESS, 1920, 1080, 0, 0, 60, 1, 1, 1, FACE_POSITION, 39500, "", 0, 1, 1, {{1, 1, 1, 1}, 2}, 1.0f, 0.0f, 1.0f, UI_CENTER, 1, 100, 0, 0, 100, MENU_CONFIRM_ORIGINAL, 1, 0, FSR_NATIVE, 0.8f, 1, 0.9f, 1, FSR_UP_3, UPDATES_ASK, 1
-Config g_config = {CONFIG_DEFAULT_VALUES};
-Config config_defaults(void) { Config c = {CONFIG_DEFAULT_VALUES}; return c; }
+#define CONFIG_DEFAULT_VALUES { \
+    .display_mode = DISPLAY_BORDERLESS, .width = 1920, .height = 1080, .fps = 60, .vsync = 1, .msaa = 1, .fxaa = 1, \
+    .ssao = 0, .face_buttons = FACE_POSITION, .controller_rumble = 1, .ldn_port = 39500, .ldn_join = "", \
+    .sync_small_monsters = 0, .bonus_content = 1, .village_in_hub = 1, .hp = {{1, 1, 1, 1}, 2}, \
+    .mouse_sensitivity = 1.0f, .camera_invert_horizontal = 0, .camera_invert_vertical = 0, .camera_smoothing = 0.5f, \
+    .mouse_buttons = {BTN_X, -1, BTN_A, -1, -1}, \
+    .keyboard = { \
+        SDL_SCANCODE_1, SDL_SCANCODE_UP, SDL_SCANCODE_2, SDL_SCANCODE_RIGHT, \
+        SDL_SCANCODE_3, SDL_SCANCODE_DOWN, SDL_SCANCODE_4, SDL_SCANCODE_LEFT, \
+        SDL_SCANCODE_SPACE, SDL_SCANCODE_BACKSPACE, SDL_SCANCODE_E, SDL_SCANCODE_Q, \
+        SDL_SCANCODE_LSHIFT, SDL_SCANCODE_TAB, SDL_SCANCODE_R, SDL_SCANCODE_KP_ENTER, \
+        SDL_SCANCODE_ESCAPE, SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_C, SDL_SCANCODE_V, \
+        SDL_SCANCODE_LCTRL, SDL_SCANCODE_F, SDL_SCANCODE_RETURN, SDL_SCANCODE_LALT, \
+        SDL_SCANCODE_W, SDL_SCANCODE_A, SDL_SCANCODE_S, SDL_SCANCODE_D, \
+        SDL_SCANCODE_G, SDL_SCANCODE_H, SDL_SCANCODE_T, SDL_SCANCODE_U, \
+        SDL_SCANCODE_RSHIFT, SDL_SCANCODE_Z, SDL_SCANCODE_B, SDL_SCANCODE_LALT, SDL_SCANCODE_RCTRL, \
+    }, \
+    .aspect_ratio = 0.0f, .fov = 1.0f, .ui_anchor = UI_CENTER, .background_input = 1, .volume = 100, \
+    .button_icons = 0, .language = 0, .menu_scale = 100, .menu_confirm = MENU_CONFIRM_ORIGINAL, .confirm_exit = 1, \
+    .fsr = 0, .fsr_quality = FSR_NATIVE, .fsr_sharpness = 0.8f, .fsr_objmotion = 1, .fsr_reactive = 0.9f, \
+    .fsr_animsurf = 1, .fsr_upscaler = FSR_UP_3, .updates = UPDATES_ASK, .shader_prewarm = 1, \
+}
+Config g_config = CONFIG_DEFAULT_VALUES;
+Config config_defaults(void) { Config c = CONFIG_DEFAULT_VALUES; return c; }
 uint32_t g_render_size[2] = {1920, 1080};
 float g_render_aspect = 16.0f / 9.0f;
 float g_fov_scale = 1.0f;
@@ -69,6 +90,10 @@ static const char DEFAULT_INI[] =
     "; GU's default FXAA\n"
     "; Default: On\n"
     "FXAA = On\n"
+    "\n"
+    "; Screen-space ambient occlusion\n"
+    "; Default: Off\n"
+    "SSAO = Off\n"
     "\n"
     "[Upscaler]\n"
     "; FSR temporal upscaling\n"
@@ -132,6 +157,10 @@ static const char DEFAULT_INI[] =
     "; Default: On\n"
     "BackgroundInput = On\n"
     "\n"
+    "; Rumble when the game requests controller vibration\n"
+    "; Default: On\n"
+    "Rumble = On\n"
+    "\n"
     "[Keyboard]\n"
     "; Keyboard keys for Switch buttons and stick directions. The launcher can capture a key when you click a binding.\n"
     "; D-pad defaults keep both the number keys and arrow keys; button Alt keys provide a second binding. Delete\n"
@@ -176,6 +205,11 @@ static const char DEFAULT_INI[] =
     "StickRight = D\n"
     "\n"
     "[Mouse]\n"
+    "; Reverse the mouse-look axes\n"
+    "InvertHorizontal = Off\n"
+    "InvertVertical = Off\n"
+    "; 0.05 is smooth with slower response; 1 is immediate\n"
+    "Smoothing = 0.5\n"
     "; Mouse sensitivity\n"
     "; Default: 1.0\n"
     "MouseSensitivity = 1.0\n"
@@ -331,6 +365,7 @@ static bool parse_aspect(const char *v, float *out) {
 #define ERR_SIZE "Resolution must be Desktop/Auto or 320x180 to 16384x16384."
 #define ERR_ASPECT "Aspect ratio must be Auto or between 0.5 and 10."
 #define ERR_VIEW "FOV must be 0.5-2.0 and mouse sensitivity 0.1-10."
+#define ERR_MOUSE "Mouse smoothing must be 0.05-1."
 #define ERR_MISC "Invalid frame cap, anti-aliasing, controller, HUD or volume setting."
 #define ERR_TOGGLE "Invalid On/Off value."
 #define ERR_FSR "Invalid FSR quality, provider, sharpness or reactive mask."
@@ -356,6 +391,7 @@ const ConfigSetting g_settings[] = {
      ERR_MISC},
     {"Anti-aliasing", "MSAA", SET_CHOICE, F(msaa), 0, 0, 0, "Off|none|0|1|1x,2x|2,4x|4,8x|8", msaa_values, false, ERR_MISC},
     ON_OFF("Anti-aliasing", "FXAA", fxaa, false),
+    ON_OFF("Anti-aliasing", "SSAO", ssao, false),
     ON_OFF("Upscaler", "FSR", fsr, true),
     {"Upscaler", "Upscaler", SET_CHOICE, F(fsr_upscaler), 0, 0, 0, "FSR3|fsr3.1|3,FSR4|4", NULL, true, ERR_FSR},
     {"Upscaler", "FSRQuality", SET_CHOICE, F(fsr_quality), 0, 0, 0,
@@ -371,6 +407,10 @@ const ConfigSetting g_settings[] = {
      NULL, false, ERR_MISC},
     {"Controls", "MenuConfirm", SET_CHOICE, F(menu_confirm), 0, 0, 0, "Original,South,East", NULL, false, ERR_CONFIRM},
     ON_OFF("Controls", "BackgroundInput", background_input, false),
+    ON_OFF("Controls", "Rumble", controller_rumble, false),
+    {"Mouse", "InvertHorizontal", SET_BOOL, F(camera_invert_horizontal), 0, 0, 0, NULL, NULL, false, ERR_TOGGLE},
+    {"Mouse", "InvertVertical", SET_BOOL, F(camera_invert_vertical), 0, 0, 0, NULL, NULL, false, ERR_TOGGLE},
+    {"Mouse", "Smoothing", SET_FLOAT, F(camera_smoothing), 0, 0.05f, 1.0f, NULL, NULL, false, ERR_MOUSE},
     {"Mouse", "MouseSensitivity", SET_FLOAT, F(mouse_sensitivity), 0, 0.1f, 10.0f, NULL, NULL, false, ERR_VIEW},
     {"Multiplayer", "Port", SET_INT, F(ldn_port), 0, 1, 65535, NULL, NULL, true, ERR_NET},
     {"Multiplayer", "Join", SET_TEXT, F(ldn_join), sizeof g_config.ldn_join, 0, 0, NULL, NULL, true, ERR_NET},
@@ -634,6 +674,22 @@ static void set_key(const char *key, char *val, int line) {
     snprintf(v, sizeof v, "%s", val);
     squash(k);
     squash(v);
+    for (unsigned i = 0; i < sizeof keyboard_settings / sizeof *keyboard_settings; i++) {
+        if (strcmp(k, keyboard_settings[i].key)) continue;
+        SDL_Scancode scancode = !strcmp(v, "none") ? SDL_SCANCODE_UNKNOWN : SDL_GetScancodeFromName(val);
+        if ((!strcmp(v, "none") || scancode != SDL_SCANCODE_UNKNOWN) && scancode < SDL_SCANCODE_COUNT)
+            g_config.keyboard[keyboard_settings[i].binding] = scancode;
+        else
+            LOG("[config] line %d: \"%s\" is not a recognized keyboard key; using the default\n", line, val);
+        return;
+    }
+    for (unsigned i = 0; i < sizeof mouse_settings / sizeof *mouse_settings; i++) {
+        if (strcmp(k, mouse_settings[i].key)) continue;
+        int button = parse_mouse_button(v);
+        if (button != -2) g_config.mouse_buttons[mouse_settings[i].binding] = button;
+        else LOG("[config] line %d: \"%s\" is not a recognized mouse button mapping; using the default\n", line, val);
+        return;
+    }
     if (!strncmp(k, "quest", 5) && isdigit((unsigned char)k[5])) {  // [Monster HP] Quest<number> = factors
         HpScale *h = &g_config.hp;
         char *end;
@@ -756,19 +812,6 @@ void config_load(void) {
     if ((e = getenv("MHGU_MSAA"))) g_config.msaa = atoi(e) >= 8 ? 8 : atoi(e) >= 4 ? 4 : atoi(e) >= 2 ? 2 : 1;
     if ((e = getenv("MHGU_FXAA"))) g_config.fxaa = atoi(e) != 0;
     if ((e = getenv("MHGU_SSAO"))) g_config.ssao = atoi(e) != 0;
-    if ((e = getenv("MHGU_FSR"))) g_config.fsr = atoi(e) != 0;
-    if ((e = getenv("MHGU_FSR_QUALITY"))) {
-        char quality[32];
-        snprintf(quality, sizeof quality, "%s", e);
-        squash(quality);
-        parse_fsr_quality(quality, &g_config.fsr_quality);
-    }
-    if ((e = getenv("MHGU_FSR_OBJMOTION"))) g_config.fsr_objmotion = atoi(e) != 0;
-    if ((e = getenv("MHGU_FSR_ANIMSURF"))) g_config.fsr_animsurf = atoi(e) != 0;
-    if ((e = getenv("MHGU_FSR_SHARPNESS")) && strtof(e, NULL) >= 0.0f && strtof(e, NULL) <= 1.0f)
-        g_config.fsr_sharpness = strtof(e, NULL);
-    if ((e = getenv("MHGU_FSR_REACTIVE")) && strtof(e, NULL) >= 0.0f && strtof(e, NULL) <= 1.0f)
-        g_config.fsr_reactive = strtof(e, NULL);
     if ((e = getenv("MHGU_BACKGROUND_INPUT"))) g_config.background_input = atoi(e) != 0;
     if ((e = getenv("MHGU_PAD_POSITIONAL"))) g_config.face_buttons = atoi(e) ? FACE_POSITION : FACE_LABEL;
     if ((e = getenv("MHGU_LDN_PORT")) && atoi(e) > 0) g_config.ldn_port = atoi(e);

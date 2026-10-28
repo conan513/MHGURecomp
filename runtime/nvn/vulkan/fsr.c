@@ -1423,7 +1423,7 @@ static bool run_fsr(NvnTexture *h, NvnTexture *hs, NvnTexture *depth, NvnTexture
     last_dispatch_ns = now;
     bool reset_in = reset;
     if (use_fsr4) {  // FSR 4: the same inputs, recorded by the driver's provider
-        float n = cam->near, f = cam->far;
+        float n = cam->near_plane, f = cam->far_plane;
         if (!(n > 0.0f) || !(f > n)) n = 8.0f, f = 50000.0f;
         Fsr4Dispatch d4 = {.cb = cb, .color = {hb->image, hb->format, hb->width, hb->height},
                            .depth = {img_depth.image, img_depth.format, img_depth.width, img_depth.height},
@@ -1463,7 +1463,7 @@ static bool run_fsr(NvnTexture *h, NvnTexture *hs, NvnTexture *depth, NvnTexture
     di.outputSize = (FfxVkPortableExtent2D){ow, oh};
     di.frameTimeMilliseconds = dt;
     di.preExposure = 1.0f;
-    float n = cam->near, f = cam->far;
+    float n = cam->near_plane, f = cam->far_plane;
     if (!(n > 0.0f) || !(f > n)) n = 8.0f, f = 50000.0f;
     di.cameraNear = n, di.cameraFar = f;
     di.cameraVerticalFovRadians = cam->fovy > 0.05f && cam->fovy < 3.0f ? cam->fovy : 1.0f;

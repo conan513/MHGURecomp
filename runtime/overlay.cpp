@@ -26,6 +26,7 @@ static void ImGui_ImplVulkan_UpdateTexture(ImTextureData *) {}
 #endif
 
 #include "forge.h"
+#include "forge_font_ranges.h"
 #include "menu_confirm.h"
 #include "overlay.h"
 #include "settings_panel.h"

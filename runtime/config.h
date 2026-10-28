@@ -11,6 +11,47 @@ extern "C" {
 enum { DISPLAY_WINDOWED, DISPLAY_FULLSCREEN, DISPLAY_BORDERLESS };
 enum { FACE_POSITION, FACE_LABEL };
 enum { MENU_CONFIRM_ORIGINAL, MENU_CONFIRM_SOUTH, MENU_CONFIRM_EAST };
+enum { MOUSE_LEFT, MOUSE_MIDDLE, MOUSE_RIGHT, MOUSE_X1, MOUSE_X2, MOUSE_BUTTON_COUNT };
+enum {
+    KEY_DPAD_UP,
+    KEY_DPAD_UP_ALT,
+    KEY_DPAD_RIGHT,
+    KEY_DPAD_RIGHT_ALT,
+    KEY_DPAD_DOWN,
+    KEY_DPAD_DOWN_ALT,
+    KEY_DPAD_LEFT,
+    KEY_DPAD_LEFT_ALT,
+    KEY_BUTTON_B,
+    KEY_BUTTON_B_ALT,
+    KEY_BUTTON_Y,
+    KEY_BUTTON_L,
+    KEY_BUTTON_R,
+    KEY_BUTTON_ZL,
+    KEY_BUTTON_ZR,
+    KEY_BUTTON_PLUS,
+    KEY_BUTTON_PLUS_ALT,
+    KEY_BUTTON_PLUS_ALT2,
+    KEY_BUTTON_MINUS,
+    KEY_BUTTON_MINUS_ALT,
+    KEY_BUTTON_LSTICK,
+    KEY_BUTTON_A,
+    KEY_BUTTON_A_ALT,
+    KEY_BUTTON_RSTICK,
+    KEY_STICK_UP,
+    KEY_STICK_LEFT,
+    KEY_STICK_DOWN,
+    KEY_STICK_RIGHT,
+    KEY_BUTTON_X,
+    KEY_BUTTON_X_ALT,
+    KEY_BUTTON_Y_ALT,
+    KEY_BUTTON_L_ALT,
+    KEY_BUTTON_R_ALT,
+    KEY_BUTTON_ZL_ALT,
+    KEY_BUTTON_ZR_ALT,
+    KEY_BUTTON_LSTICK_ALT,
+    KEY_BUTTON_RSTICK_ALT,
+    KEY_BINDING_COUNT,
+};
 
 // [Monster HP]: factors on the HP multiplier of Hub-type quests' large monsters
 #define HP_QUESTS_MAX 256
@@ -30,14 +71,8 @@ typedef struct {
     int fps;                  // frame rate cap: 30..240
     int vsync;                // 1: present without tearing (mailbox / FIFO, at most the refresh rate), 0: immediate
     int msaa;                 // samples of the 3D scene: 1 (off), 2, 4, 8
-    int fxaa;                 // the game's own FXAA pass: 1 on, 0 off
+    int fxaa;                  // the game's own FXAA pass: 1 on, 0 off
     int ssao;                 // presentation-time screen-space ambient occlusion: 1 on, 0 off
-    int fsr;                  // [Upscaler] FSR 3.1: 1 on, 0 off
-    int fsr_quality;          // FSR_*: render resolution ratio
-    float fsr_sharpness;      // FSR RCAS sharpening, 0..1
-    int fsr_objmotion;        // object motion vectors: 1 on, 0 camera only
-    float fsr_reactive;       // reactive mask strength: 0..1
-    int fsr_animsurf;         // animated surface detection: 1 on, 0 off
     int face_buttons;         // FACE_*: controller face buttons by position (the Switch layout) or by their labels
     int controller_rumble;    // rumble the gamepad when the game requests vibration
     int ldn_port;             // local play: the port a hosted hub listens on (TCP; UDP for LAN search)
