@@ -17,7 +17,6 @@
 //   frames. BUTTON: A B X Y L R ZL ZR PLUS MINUS LEFT UP RIGHT DOWN LSTICK RSTICK, or STICK_UP/DOWN/LEFT/RIGHT and
 //   RSTICK_UP/DOWN/LEFT/RIGHT (full tilt).
 #include <stdlib.h>
-#include <math.h>
 #include <string.h>
 #include <time.h>
 
@@ -739,10 +738,5 @@ void host_input_update(void) {
         else if (down & B(BTN_B)) textinput_key(TI_CANCEL);
         b &= ~(B(BTN_PLUS) | B(BTN_B));
     }
-    float yaw = camjit_mouse_yaw();
-    float cy = cosf(yaw), sy = sinf(yaw);
-    int move_x = (int)(lx * cy + ly * sy);
-    int move_y = (int)(ly * cy - lx * sy);
-    lx = move_x, ly = move_y;
     input_set(b, clamp_axis(lx), clamp_axis(ly), clamp_axis(rx), clamp_axis(ry));
 }

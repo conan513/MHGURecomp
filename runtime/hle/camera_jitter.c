@@ -32,8 +32,6 @@
 
 #define FN_LOOKAT     0x21c33cu  // look-at: r0 = out view matrix, r1 = camera
 #define FN_PROJECTION 0x21c358u  // projection: r0 = out matrix, r1 = camera
-#define FN_WORLD_SCREEN       0x21c380u
-#define FN_WORLD_SCREEN_ALT   0x21c3a0u
 #define CAM_FAR       0x30u
 #define CAM_NEAR      0x34u
 #define CAM_ASPECT    0x38u
@@ -59,6 +57,8 @@ static bool g_mouse_enabled;
 static uint64_t g_mouse_present = UINT64_MAX;
 static float g_mouse_yaw, g_mouse_pitch;
 static float g_mouse_yaw_target, g_mouse_pitch_target;
+static uint64_t g_mouse_pose_present = UINT64_MAX;
+static uint32_t g_mouse_pose_cam;
 
 #define MOUSE_RAD_PER_COUNT (0.06f * 0.017453292519943295f)
 #define CAMERA_GROUND_CLEARANCE 80.0f
@@ -82,14 +82,16 @@ static bool quest_camera_allowed(void) {
     return readable(data, 0x0c) && LD32(data + 8) != 0;
 }
 
-static bool mouse_camera_apply(uint32_t cam, float eye[3], float up[3]) {
-    if (!g_mouse_enabled || g_mouse_cam != cam) return false;
+static void mouse_camera_apply(uint32_t cam) {
+    if (!g_mouse_enabled || g_mouse_cam != cam) return;
+    if (g_mouse_pose_present == g_present_count && g_mouse_pose_cam == cam) return;
+    g_mouse_pose_present = g_present_count;
+    g_mouse_pose_cam = cam;
     float target[3] = {LDF(cam + CAM_TARGET), LDF(cam + CAM_TARGET + 4), LDF(cam + CAM_TARGET + 8)};
-    eye[0] = LDF(cam + CAM_EYE), eye[1] = LDF(cam + CAM_EYE + 4), eye[2] = LDF(cam + CAM_EYE + 8);
-    up[0] = LDF(cam + CAM_UP), up[1] = LDF(cam + CAM_UP + 4), up[2] = LDF(cam + CAM_UP + 8);
+    float eye[3] = {LDF(cam + CAM_EYE), LDF(cam + CAM_EYE + 4), LDF(cam + CAM_EYE + 8)};
     float delta[3] = {eye[0] - target[0], eye[1] - target[1], eye[2] - target[2]};
     float radius = sqrtf(delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]);
-    if (!(radius > 1.0f) || !isfinite(radius)) return false;
+    if (!(radius > 1.0f) || !isfinite(radius)) return;
 
     float azimuth = atan2f(delta[0], delta[2]) - g_mouse_yaw;
     float elevation = asinf(fmaxf(-1.0f, fminf(1.0f, delta[1] / radius))) + g_mouse_pitch;
@@ -118,16 +120,6 @@ static bool mouse_camera_apply(uint32_t cam, float eye[3], float up[3]) {
     STF(cam + CAM_UP, 0.0f);
     STF(cam + CAM_UP + 4, 1.0f);
     STF(cam + CAM_UP + 8, 0.0f);
-    return true;
-}
-
-static void mouse_camera_restore(uint32_t cam, const float eye[3], const float up[3]) {
-    STF(cam + CAM_EYE, eye[0]);
-    STF(cam + CAM_EYE + 4, eye[1]);
-    STF(cam + CAM_EYE + 8, eye[2]);
-    STF(cam + CAM_UP, up[0]);
-    STF(cam + CAM_UP + 4, up[1]);
-    STF(cam + CAM_UP + 8, up[2]);
 }
 
 static void lookat(Cpu *c) {
@@ -141,6 +133,8 @@ static void lookat(Cpu *c) {
     if (enabled != g_mouse_enabled) {
         g_mouse_yaw = g_mouse_pitch = 0;
         g_mouse_yaw_target = g_mouse_pitch_target = 0;
+        g_mouse_pose_present = UINT64_MAX;
+        g_mouse_pose_cam = 0;
     }
     g_mouse_enabled = enabled;
     if (g_mouse_present != g_present_count) {
@@ -169,12 +163,10 @@ static void lookat(Cpu *c) {
             g_mouse_yaw_target = g_mouse_pitch_target = 0;
         }
     }
-    float eye[3], up[3];
-    bool orbit = mouse_camera_apply(cam, eye, up);
+    mouse_camera_apply(cam);
     fnhook_call_original(c, FN_LOOKAT);
     float view[16];
     memcpy(view, G2H(out), 64);
-    if (orbit) mouse_camera_restore(cam, eye, up);
     memcpy(G2H(out), view, 64);
     int i = 0;
     while (i < g_nviews && g_views[i].cam != cam) i++;
@@ -186,23 +178,6 @@ static void lookat(Cpu *c) {
     memcpy(g_views[i].m, view, 64);
     pthread_mutex_unlock(&g_lock);
 }
-
-static void world_to_screen(Cpu *c, uint32_t fn, int cam_reg) {
-    uint32_t cam = c->r[cam_reg];
-    if (!readable(cam, 0x70) || !main_aspect(LDF(cam + CAM_ASPECT))) {
-        fnhook_call_original(c, fn);
-        return;
-    }
-    pthread_mutex_lock(&g_lock);
-    float eye[3], up[3];
-    bool orbit = mouse_camera_apply(cam, eye, up);
-    fnhook_call_original(c, fn);
-    if (orbit) mouse_camera_restore(cam, eye, up);
-    pthread_mutex_unlock(&g_lock);
-}
-
-static void world_to_screen_21c380(Cpu *c) { world_to_screen(c, FN_WORLD_SCREEN, 0); }
-static void world_to_screen_21c3a0(Cpu *c) { world_to_screen(c, FN_WORLD_SCREEN_ALT, 0); }
 
 static void projection(Cpu *c) {
     uint32_t out = c->r[0], cam = c->r[1];
@@ -255,13 +230,6 @@ void camjit_set(bool on, uint32_t render_w, uint32_t render_h, uint32_t phases) 
     pthread_mutex_unlock(&g_lock);
 }
 
-float camjit_mouse_yaw(void) {
-    pthread_mutex_lock(&g_lock);
-    float yaw = g_mouse_enabled ? g_mouse_yaw : 0.0f;
-    pthread_mutex_unlock(&g_lock);
-    return yaw;
-}
-
 bool camjit_latest(CamRecord *out) {
     pthread_mutex_lock(&g_lock);
     bool ok = g_seq != 0;
@@ -286,8 +254,6 @@ void camjit_init(void) {
     g_rw = g_render_size[0], g_rh = g_render_size[1];
     fnhook_set(FN_LOOKAT, hle_register("camjit:lookat", lookat));
     fnhook_set(FN_PROJECTION, hle_register("camjit:projection", projection));
-    fnhook_set(FN_WORLD_SCREEN, hle_register("camjit:world_screen_21c380", world_to_screen_21c380));
-    fnhook_set(FN_WORLD_SCREEN_ALT, hle_register("camjit:world_screen_21c3a0", world_to_screen_21c3a0));
     if (g_test) LOG("[camjit] test: the 3D picture shifted by (%g, %g) render pixels (x right, y down)\n", g_test_xy[0], g_test_xy[1]);
     else LOG("[camjit] main camera hooked (mouse look / FSR / SSAO)\n");
 }

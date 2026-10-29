@@ -16,7 +16,6 @@ typedef struct {
 } CamRecord;
 
 void camjit_init(void);  // camera view hook for mouse look, FSR and SSAO
-float camjit_mouse_yaw(void);  // smoothed mouse-look yaw offset for camera-relative movement
 // Renderer: jitter on or off from the next capture on, the 3D render size and the Halton sequence's length.
 void camjit_set(bool on, uint32_t render_w, uint32_t render_h, uint32_t phases);
 bool camjit_latest(CamRecord *out);              // the newest capture (false: none yet)
