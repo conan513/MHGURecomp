@@ -53,6 +53,7 @@ static uint32_t g_rw = 1920, g_rh = 1080, g_phases = 8;
 static bool g_test;                 // MHGU_JITTER_TEST
 static float g_test_xy[2];
 static bool g_log;
+static bool g_collision_log;
 static uint32_t g_mouse_cam;
 static bool g_mouse_enabled;
 static uint64_t g_mouse_present = UINT64_MAX;
@@ -60,6 +61,7 @@ static float g_mouse_yaw, g_mouse_pitch;
 static float g_mouse_yaw_target, g_mouse_pitch_target;
 
 #define MOUSE_RAD_PER_COUNT (0.06f * 0.017453292519943295f)
+#define CAMERA_GROUND_CLEARANCE 80.0f
 
 static bool main_aspect(float a) {
     return fabsf(a - 16.0f / 9.0f) < 0.01f || fabsf(a - g_render_aspect) < 0.01f;
@@ -94,9 +96,25 @@ static bool mouse_camera_apply(uint32_t cam, float eye[3], float up[3]) {
     if (elevation > 1.2f) elevation = 1.2f;
     if (elevation < -1.2f) elevation = -1.2f;
     float horizontal = cosf(elevation) * radius;
-    STF(cam + CAM_EYE, target[0] + sinf(azimuth) * horizontal);
-    STF(cam + CAM_EYE + 4, target[1] + sinf(elevation) * radius);
-    STF(cam + CAM_EYE + 8, target[2] + cosf(azimuth) * horizontal);
+    float orbit_eye[3] = {target[0] + sinf(azimuth) * horizontal,
+                          target[1] + sinf(elevation) * radius,
+                          target[2] + cosf(azimuth) * horizontal};
+    if (orbit_eye[1] < target[1] - CAMERA_GROUND_CLEARANCE) {
+        float max_radius = CAMERA_GROUND_CLEARANCE / -sinf(elevation);
+        if (max_radius < radius) {
+            if (g_collision_log)
+                LOG("[camera] frame %llu: ground guard target_y %g eye_y %g radius %g->%g\n",
+                    (unsigned long long)g_present_count, target[1], orbit_eye[1], radius, max_radius);
+            radius = max_radius;
+        }
+    }
+    horizontal = cosf(elevation) * radius;
+    orbit_eye[0] = target[0] + sinf(azimuth) * horizontal;
+    orbit_eye[1] = target[1] + sinf(elevation) * radius;
+    orbit_eye[2] = target[2] + cosf(azimuth) * horizontal;
+    STF(cam + CAM_EYE, orbit_eye[0]);
+    STF(cam + CAM_EYE + 4, orbit_eye[1]);
+    STF(cam + CAM_EYE + 8, orbit_eye[2]);
     STF(cam + CAM_UP, 0.0f);
     STF(cam + CAM_UP + 4, 1.0f);
     STF(cam + CAM_UP + 8, 0.0f);
@@ -264,6 +282,7 @@ void camjit_init(void) {
     const char *e = getenv("MHGU_JITTER_TEST");
     g_test = e && sscanf(e, "%f,%f", &g_test_xy[0], &g_test_xy[1]) == 2;
     g_log = getenv("MHGU_JITTER_LOG") != NULL;
+    g_collision_log = getenv("MHGU_CAMERA_COLLISION_LOG") != NULL;
     g_rw = g_render_size[0], g_rh = g_render_size[1];
     fnhook_set(FN_LOOKAT, hle_register("camjit:lookat", lookat));
     fnhook_set(FN_PROJECTION, hle_register("camjit:projection", projection));
