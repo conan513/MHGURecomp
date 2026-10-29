@@ -16,6 +16,7 @@ const categories = [
   { id: 'display', title: 'Display', icon: '◈' },
   { id: 'graphics', title: 'Graphics', icon: '◇' },
   { id: 'controller', title: 'Controller', icon: '◉' },
+  { id: 'audio', title: 'Audio', icon: '♫' },
   { id: 'keyboardMouse', title: 'Keyboard/Mouse', icon: '⌘' },
   { id: 'multiplayer', title: 'Multiplayer', icon: '◎' },
   { id: 'gameplay', title: 'Gameplay', icon: '⚔' },
@@ -80,9 +81,10 @@ const categoryFields = {
   display: ['mode', 'resolution', 'renderResolution', 'aspectRatio', 'fov', 'uiAnchor'],
   graphics: [
     'msaa', 'fxaa', 'ssao', 'fsr', 'fsrUpscaler', 'fsrQuality', 'fsrSharpness',
-    'fsrObjectMotion', 'fsrReactive', 'fsrAnimSurf', 'fps', 'vsync', 'shaderPrewarm',
+    'fsrObjectMotion', 'fsrReactive', 'fsrAnimSurf', 'drawDistance', 'fps', 'vsync', 'shaderPrewarm',
   ],
-  controller: ['faceButtons', 'backgroundInput', 'rumble'],
+  controller: ['faceButtons', 'backgroundInput', 'rumble', 'comboInputWindow'],
+  audio: ['muteInBackground'],
   keyboardMouse: [],
   multiplayer: ['port', 'join', 'syncSmallMonsters'],
   gameplay: ['villageQuestsInHub', 'hubHp', 'bonusContent', 'hp1', 'hp2', 'hp3', 'hp4', 'quests'],
@@ -140,6 +142,15 @@ const fieldInfo = {
   fsrObjectMotion: { label: 'Object motion vectors', kind: 'toggle', help: 'Tracks moving characters and monsters to reduce temporal ghosting. Can be disabled if it causes issues.' },
   fsrReactive: { label: 'Reactive mask strength', kind: 'number', min: 0, max: 1, step: 0.1, help: 'Helps preserve detail on moving objects; set to 0 to disable.' },
   fsrAnimSurf: { label: 'Animated surface detection', kind: 'toggle', help: 'Detects texture-animated surfaces such as water to reduce ghosting.' },
+  drawDistance: {
+    label: 'Draw distance',
+    kind: 'select',
+    options: [
+      { label: '0 (No limit)', value: '0' },
+      ...Array.from({ length: 10 }, (_, index) => String(index + 1)),
+    ],
+    help: 'Controls how far away people in villages and Hubs are drawn. 1 is the game default; 0 means no limit.',
+  },
   fps: {
     label: 'Frame rate limit',
     kind: 'preset',
@@ -170,6 +181,17 @@ const fieldInfo = {
     label: 'Controller rumble',
     kind: 'toggle',
     help: "Send the game's vibration to the connected controller.",
+  },
+  comboInputWindow: {
+    label: 'Combo input window',
+    kind: 'select',
+    options: ['Lenient', 'Strict'],
+    help: 'Lenient allows more time between inputs in a combo; Strict requires more precise timing.',
+  },
+  muteInBackground: {
+    label: 'Mute when in background',
+    kind: 'toggle',
+    help: 'Mute game audio while its window is not focused.',
   },
   mouseSensitivity: {
     label: 'Mouse sensitivity',
@@ -445,6 +467,12 @@ function writeVisibleFields() {
     } else if (control instanceof HTMLButtonElement) {
       control.dataset.boundKey = settings[id] ?? '';
       control.textContent = listeningForBinding === control ? 'Press a key…' : settings[id] ?? '';
+    } else if (id === 'drawDistance') {
+      const value = settings[id] ?? '';
+      if (value && !Array.from(control.options).some((option) => option.value === value)) {
+        control.add(new Option(`${value} (current setting)`, value));
+      }
+      control.value = value;
     } else {
       control.value = settings[id] ?? '';
     }

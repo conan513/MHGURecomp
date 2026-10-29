@@ -516,7 +516,8 @@ void host_input_event(const SDL_Event *e) {
     }
     case SDL_EVENT_WINDOW_FOCUS_LOST:
         memset(keys, 0, sizeof keys);
-        mouse_buttons = 0, mouse_grab = false;
+        memset(mouse_down, 0, sizeof mouse_down);
+        mouse_grab = false;
         config_window_focus(false);  // ([Audio] MuteInBackground)
         if (config_editable().mute_in_background) LOG("[input] window in the background: sound muted\n");
         break;

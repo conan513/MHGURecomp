@@ -171,6 +171,13 @@ const FIELDS: &[Field] = &[
         kind: FieldKind::Toggle,
     },
     Field {
+        section: "Graphics",
+        key: "DrawDistance",
+        id: "drawDistance",
+        default: "1.0",
+        kind: FieldKind::Decimal(0.0, 10.0),
+    },
+    Field {
         section: "Performance",
         key: "FPS",
         id: "fps",
@@ -210,6 +217,20 @@ const FIELDS: &[Field] = &[
         key: "Rumble",
         id: "rumble",
         default: "On",
+        kind: FieldKind::Toggle,
+    },
+    Field {
+        section: "Controls",
+        key: "ComboInputWindow",
+        id: "comboInputWindow",
+        default: "Lenient",
+        kind: FieldKind::Select(&["Lenient", "Strict"]),
+    },
+    Field {
+        section: "Audio",
+        key: "MuteInBackground",
+        id: "muteInBackground",
+        default: "Off",
         kind: FieldKind::Toggle,
     },
     Field {
@@ -610,11 +631,14 @@ const CANONICAL_SECTIONS: &[&str] = &[
     "Display",
     "Anti-aliasing",
     "Upscaler",
+    "Graphics",
     "Performance",
     "Controller",
+    "Controls",
     "Keyboard",
     "Mouse",
     "Multiplayer",
+    "Audio",
     "Monster HP",
     "Village Quests",
     "Bonus Content",
@@ -1450,6 +1474,37 @@ mod tests {
         let loaded = read_settings(&directory).expect("reload settings");
         assert_eq!(loaded["shaderPrewarm"], "Off");
         assert_eq!(loaded["syncSmallMonsters"], "On");
+        fs::remove_dir_all(directory).expect("clean temp directory");
+    }
+
+    #[test]
+    fn upstream_graphics_controls_and_audio_settings_round_trip() {
+        let directory = temp_directory();
+        let mut settings = default_settings();
+        assert_eq!(settings["drawDistance"], "1.0");
+        assert_eq!(settings["comboInputWindow"], "Lenient");
+        assert_eq!(settings["muteInBackground"], "Off");
+
+        settings["drawDistance"] = json!("2.5");
+        settings["comboInputWindow"] = json!("Strict");
+        settings["muteInBackground"] = json!("On");
+        assert!(validate_settings(&settings).is_empty());
+        save_settings(&directory, &settings).expect("save upstream settings");
+
+        let output = fs::read_to_string(ini_path(&directory)).expect("read updated ini");
+        assert!(output.contains("[Graphics]\nDrawDistance = 2.5"));
+        assert!(output.contains("[Controls]\nComboInputWindow = Strict"));
+        assert!(output.contains("[Audio]\nMuteInBackground = On"));
+        let loaded = read_settings(&directory).expect("reload settings");
+        assert_eq!(loaded["drawDistance"], "2.5");
+        assert_eq!(loaded["comboInputWindow"], "Strict");
+        assert_eq!(loaded["muteInBackground"], "On");
+
+        settings["drawDistance"] = json!("10.1");
+        assert!(validate_settings(&settings).contains_key("drawDistance"));
+        settings["drawDistance"] = json!("2.5");
+        settings["comboInputWindow"] = json!("Loose");
+        assert!(validate_settings(&settings).contains_key("comboInputWindow"));
         fs::remove_dir_all(directory).expect("clean temp directory");
     }
 
