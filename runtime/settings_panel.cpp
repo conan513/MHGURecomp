@@ -128,6 +128,7 @@ bool equal(const Config &a, const Config &b) {
     SAME(fsr_animsurf);
     SAME(vsync);
     SAME(shader_prewarm);
+    SAME(draw_distance);
     SAME(msaa);
     SAME(fxaa);
     SAME(face_buttons);
@@ -140,7 +141,9 @@ bool equal(const Config &a, const Config &b) {
     SAME(fov);
     SAME(ui_anchor);
     SAME(background_input);
+    SAME(combo_window);
     SAME(volume);
+    SAME(mute_in_background);
     SAME(button_icons);
     SAME(language);
     SAME(menu_scale);
@@ -375,15 +378,18 @@ void reset_section() {
         c.fps = f.fps;
         c.vsync = f.vsync;
         c.shader_prewarm = f.shader_prewarm;
+        c.draw_distance = f.draw_distance;
         c.msaa = f.msaa;
         c.fxaa = f.fxaa;
         c.volume = f.volume;
+        c.mute_in_background = f.mute_in_background;
         break;
     case 2:
         c.face_buttons = f.face_buttons;
         c.menu_confirm = f.menu_confirm;
         c.button_icons = f.button_icons;
         c.background_input = f.background_input;
+        c.combo_window = f.combo_window;
         c.mouse_sensitivity = f.mouse_sensitivity;
         break;
     case 3:
@@ -471,7 +477,12 @@ std::vector<Row> main_rows() {
                 r.back().value = tr("Off (FSR)");
             }
         }
+        number(r, "drawdist", tr("Draw distance"), &c.draw_distance, lo("DrawDistance"), hi("DrawDistance"), .25f,
+               cold("DrawDistance"));
+        if (c.draw_distance == 0)
+            r.back().value = tr("No limit");
         number(r, "volume", "Volume (%)", &c.volume, (int)lo("Volume"), (int)hi("Volume"), 1, cold("Volume"));
+        add_bool(r, "mutebg", "Mute in background", &c.mute_in_background, cold("MuteInBackground"));
         add_bool(r, "fsr", "FSR", &c.fsr, cold("FSR"));
         if (c.fsr) {
             add_choice(
@@ -496,6 +507,8 @@ std::vector<Row> main_rows() {
         add_choice(r, "icons", "Button icons", c.button_icons, {"Xbox", "Switch", "PlayStation"},
                    [](int v) { c.button_icons = v; }, cold("ButtonIcons"));
         add_bool(r, "background", "Background input", &c.background_input, cold("BackgroundInput"));
+        add_choice(r, "combo", "Combo input window", c.combo_window, {tr("Lenient"), tr("Strict")},
+                   [](int v) { c.combo_window = v; }, cold("ComboInputWindow"));
         number(r, "mouse", tr("Mouse sensitivity"), &c.mouse_sensitivity, lo("MouseSensitivity"), hi("MouseSensitivity"), .05f, cold("MouseSensitivity"));
         break;
     case 3:

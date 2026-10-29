@@ -23,6 +23,7 @@ Status: fully playable, but there may be some bugs. I've played a dozen hunts wi
 - Optional: village quests are playable in multiplayer (press L/R at the quest counter), with appropriately re-scaled monster HP
 - Mod support. The vast majority of mods work by dropping them into the `mods` folder, including Forge mods. (see [Mods](#mods))
 - Cheat codes in the same format as Ryujinx and Atmosphère, in the `cheats` folder (see [Cheats](#cheats))
+- Ingame PC Settings menu overlay (F1 to open, will be replaced with a real settings menu in the future)
 
 ## Requirements
 
@@ -109,7 +110,7 @@ the portable `save\` folder does not already exist. The AppData copy is left unt
 
 ## Controls
 
-Almost every controller under the sun should work, as long as it has SDL support. `FaceButtons = Position` uses the Switch layout: the bottom button acts as B and the right button as A, whatever is printed on them. Set `FaceButtons = Label` to match the printed letters instead (for example, an Xbox A button acts as A).
+Almost every controller under the sun should work, as long as it has SDL support. With more than one connected (a Steam Deck with a controller plugged in, say), press a button on the one you want to use. If you really want to swap the face buttons on non-Nintendo controllers, open the .ini file and set `FaceButtons = Label`.
 
 Keyboard and mouse support (not recommended):
 
@@ -141,7 +142,7 @@ screenshot, F7 cycles MSAA.
 ## Settings
 
 Everything is in `mhgurecomp.ini`; each setting is explained in the file itself. The settings menu changes them in
-the game: **F1**, or **Minus + Plus** on a controller (Back + Start on an Xbox controller). Frame rate, FOV,
+the game: **F1**, or **Minus + Plus** on a controller (Back + Start on an Xbox controller). Frame rate, FOV, draw distance,
 anti-aliasing, VSync, controls and volume apply when you save; the settings marked * at the next start. Details:
 [docs/SETTINGS_UI.md](docs/SETTINGS_UI.md). In short:
 
@@ -153,13 +154,17 @@ anti-aliasing, VSync, controls and volume apply when you save; the settings mark
 - `[Upscaler]`: `FSR` (Off / On, default Off), `FSRQuality` (NativeAA / Quality / Balanced / Performance /
   UltraPerformance), `Sharpness`, and `Upscaler` (FSR3, the default, or FSR4: needs an AMD RDNA 4 GPU and its driver, and an exe built with `make FSR4_DRIVER_PATCH=1`;
   falls back to FSR 3.1). FSR replaces MSAA and FXAA while it is on. Details: `docs/FSR-PORT.md`, `docs/FSR4-PORT.md`
+- `[Graphics]`: `DrawDistance` (how far away people in the villages and the Hubs are still drawn: 1 = the game's,
+  2 = twice as far, 0.5 = half, 0 = no limit; up to 10)
 - `[Performance]`: `FPS` (30 to 240), `VSync` (On / Off; above your monitor's refresh rate, turn VSync off), `ShaderPrewarm`
   (On / Off: translate all of the game's shaders in the background at startup, so fewer things are drawn black the
   first time they appear; the first start takes about 20 s for it, during the logos, and the cache folder needs about
   340 MB)
 - `[Controls]`: `FaceButtons` (Position / Label), `MenuConfirm` (the settings menu's confirm button),
   `BackgroundInput` (On / Off: the controller keeps working while the game's window is in the background, such as
-  with a wiki in front of it; default On)
+  with a wiki in front of it; default On), `ComboInputWindow` (Lenient / Strict: how long the game waits for a
+  second button for inputs like the Hunting Horn's X+A; Lenient, the default, as long as at 30 fps at any frame
+  rate, Strict a fixed number of frames, shorter the higher the frame rate)
 - `[Mouse]`: `MouseSensitivity` (1 = default, 0.1 to 10)
 - `[Multiplayer]`: `Port`, `Join` (addresses of hosts outside your LAN), `SyncSmallMonsters`
 - `[Monster HP]`: HP factors for 1 to 4 hunters in Hub quests, and per-quest exceptions (default: all 1, the
@@ -167,7 +172,8 @@ anti-aliasing, VSync, controls and volume apply when you save; the settings mark
 - `[Village Quests]`: `VillageQuestsInHub` (default On), `HubHP` (default 2.0: Village quests posted in the Hub
   multiply their monsters' HP by this first, then by the `[Monster HP]` factor)
 - `[Bonus Content]`: `BonusContent` (default On), see below
-- `[Audio]`: `Volume` (0 to 100: the whole game)
+- `[Audio]`: `Volume` (0 to 100: the whole game), `MuteInBackground` (On / Off, default Off: no sound while the
+  game's window is in the background)
 - `[Application]`: `ConfirmExit` (ask before the window closes), and the settings menu's `Language` (English /
   Spanish), `ButtonIcons` (Xbox / Switch / PlayStation) and `MenuScale` (100 to 200 percent), and `Updates` (Ask /
   Auto / Off: what `mhgurecomp-updater` does, see "Staying up to date")

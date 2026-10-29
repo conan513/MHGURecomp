@@ -8,6 +8,7 @@
 //                        MHGU_FSR_REACTIVE=<0..1>, MHGU_FSR_OBJMOTION=0|1, MHGU_FSR_ANIMSURF=0|1,
 //                        MHGU_PAD_POSITIONAL=0|1 (test runs; override the file)
 #include <ctype.h>
+#include <float.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,30 +21,9 @@
 #include "hle/input.h"
 #include "rt.h"
 
-#define CONFIG_DEFAULT_VALUES { \
-    .display_mode = DISPLAY_BORDERLESS, .width = 1920, .height = 1080, .fps = 60, .vsync = 1, .msaa = 1, .fxaa = 1, \
-    .ssao = 0, .face_buttons = FACE_POSITION, .controller_rumble = 1, .ldn_port = 39500, .ldn_join = "", \
-    .sync_small_monsters = 0, .bonus_content = 1, .village_in_hub = 1, .hp = {{1, 1, 1, 1}, 2}, \
-    .mouse_sensitivity = 1.0f, .camera_invert_horizontal = 0, .camera_invert_vertical = 0, .camera_smoothing = 0.5f, \
-    .mouse_buttons = {BTN_X, -1, BTN_A, -1, -1}, \
-    .keyboard = { \
-        SDL_SCANCODE_1, SDL_SCANCODE_UP, SDL_SCANCODE_2, SDL_SCANCODE_RIGHT, \
-        SDL_SCANCODE_3, SDL_SCANCODE_DOWN, SDL_SCANCODE_4, SDL_SCANCODE_LEFT, \
-        SDL_SCANCODE_SPACE, SDL_SCANCODE_BACKSPACE, SDL_SCANCODE_E, SDL_SCANCODE_Q, \
-        SDL_SCANCODE_LSHIFT, SDL_SCANCODE_TAB, SDL_SCANCODE_R, SDL_SCANCODE_KP_ENTER, \
-        SDL_SCANCODE_ESCAPE, SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_C, SDL_SCANCODE_V, \
-        SDL_SCANCODE_LCTRL, SDL_SCANCODE_F, SDL_SCANCODE_RETURN, SDL_SCANCODE_LALT, \
-        SDL_SCANCODE_W, SDL_SCANCODE_A, SDL_SCANCODE_S, SDL_SCANCODE_D, \
-        SDL_SCANCODE_G, SDL_SCANCODE_H, SDL_SCANCODE_T, SDL_SCANCODE_U, \
-        SDL_SCANCODE_RSHIFT, SDL_SCANCODE_Z, SDL_SCANCODE_B, SDL_SCANCODE_LALT, SDL_SCANCODE_RCTRL, \
-    }, \
-    .aspect_ratio = 0.0f, .fov = 1.0f, .ui_anchor = UI_CENTER, .background_input = 1, .volume = 100, \
-    .button_icons = 0, .language = 0, .menu_scale = 100, .menu_confirm = MENU_CONFIRM_ORIGINAL, .confirm_exit = 1, \
-    .fsr = 0, .fsr_quality = FSR_NATIVE, .fsr_sharpness = 0.8f, .fsr_objmotion = 1, .fsr_reactive = 0.9f, \
-    .fsr_animsurf = 1, .fsr_upscaler = FSR_UP_3, .updates = UPDATES_ASK, .shader_prewarm = 1, \
-}
-Config g_config = CONFIG_DEFAULT_VALUES;
-Config config_defaults(void) { Config c = CONFIG_DEFAULT_VALUES; return c; }
+#define CONFIG_DEFAULT_VALUES DISPLAY_BORDERLESS, 1920, 1080, 0, 0, 60, 1, 1, 1, FACE_POSITION, 39500, "", 0, 1, 1, {{1, 1, 1, 1}, 2}, 1.0f, 0.0f, 1.0f, UI_CENTER, 1, 100, 0, 0, 100, MENU_CONFIRM_ORIGINAL, 1, 0, FSR_NATIVE, 0.8f, 1, 0.9f, 1, FSR_UP_3, UPDATES_ASK, 1, 1.0f, 0, COMBO_LENIENT
+Config g_config = {CONFIG_DEFAULT_VALUES};
+Config config_defaults(void) { Config c = {CONFIG_DEFAULT_VALUES}; return c; }
 uint32_t g_render_size[2] = {1920, 1080};
 float g_render_aspect = 16.0f / 9.0f;
 float g_fov_scale = 1.0f;
@@ -128,6 +108,13 @@ static const char DEFAULT_INI[] =
     "; Default: On\n"
     "AnimSurf = On\n"
     "\n"
+    "[Graphics]\n"
+    "; How far away people in the villages and the Hubs are still drawn: 1 is the game's distance, 2 twice as far,\n"
+    "; 0.5 half as far, 0 no limit\n"
+    "; Between 0 and 10\n"
+    "; Default: 1.0\n"
+    "DrawDistance = 1.0\n"
+    "\n"
     "[Performance]\n"
     "; Framerate cap\n"
     "; Between 30 and 240\n"
@@ -157,52 +144,12 @@ static const char DEFAULT_INI[] =
     "; Default: On\n"
     "BackgroundInput = On\n"
     "\n"
-    "; Rumble when the game requests controller vibration\n"
-    "; Default: On\n"
-    "Rumble = On\n"
-    "\n"
-    "[Keyboard]\n"
-    "; Keyboard keys for Switch buttons and stick directions. The launcher can capture a key when you click a binding.\n"
-    "; D-pad defaults keep both the number keys and arrow keys; button Alt keys provide a second binding. Delete\n"
-    "; clears a launcher binding; None disables it.\n"
-    "; Enter confirms (A), Backspace goes back (B). Key names use SDL names (e.g. Left Shift, Keypad Enter).\n"
-    "DpadUp = 1\n"
-    "DpadUpAlt = Up\n"
-    "DpadRight = 2\n"
-    "DpadRightAlt = Right\n"
-    "DpadDown = 3\n"
-    "DpadDownAlt = Down\n"
-    "DpadLeft = 4\n"
-    "DpadLeftAlt = Left\n"
-    "ButtonB = Space\n"
-    "ButtonBAlt = Backspace\n"
-    "ButtonX = G\n"
-    "ButtonXAlt = H\n"
-    "ButtonY = E\n"
-    "ButtonYAlt = T\n"
-    "ButtonL = Q\n"
-    "ButtonLAlt = U\n"
-    "ButtonR = Left Shift\n"
-    "ButtonRAlt = Right Shift\n"
-    "ButtonZL = Tab\n"
-    "ButtonZLAlt = Z\n"
-    "ButtonZR = R\n"
-    "ButtonZRAlt = B\n"
-    "ButtonPlus = Keypad Enter\n"
-    "ButtonPlusAlt = Escape\n"
-    "ButtonPlusAlt2 = None\n"
-    "ButtonMinus = C\n"
-    "ButtonMinusAlt = V\n"
-    "ButtonLeftStick = Left Ctrl\n"
-    "ButtonLeftStickAlt = Left Alt\n"
-    "ButtonA = F\n"
-    "ButtonAAlt = Return\n"
-    "ButtonRightStick = Left Alt\n"
-    "ButtonRightStickAlt = Right Ctrl\n"
-    "StickUp = W\n"
-    "StickLeft = A\n"
-    "StickDown = S\n"
-    "StickRight = D\n"
+    "; How long the game waits for a second button after the first, for inputs like X+A. Lenient: as long as at 30 fps\n"
+    "; (on the Switch) at any frame rate. Strict: a fixed number of frames, so the higher the frame rate, the closer\n"
+    "; together both buttons have to be pressed\n"
+    "; Lenient, Strict\n"
+    "; Default: Lenient\n"
+    "ComboInputWindow = Lenient\n"
     "\n"
     "[Mouse]\n"
     "; Reverse the mouse-look axes\n"
@@ -268,6 +215,10 @@ static const char DEFAULT_INI[] =
     "; Between 0 (mute) and 100\n"
     "; Default: 100\n"
     "Volume = 100\n"
+    "\n"
+    "; Mute the game while its window is in the background (not focused)\n"
+    "; Default: Off\n"
+    "MuteInBackground = Off\n"
     "\n"
     "[Application]\n"
     "; Ask before the game window closes (closing does not save the game)\n"
@@ -344,6 +295,13 @@ float camera_fovy(float fovy, float aspect) {
     return fovy;
 }
 
+// Town NPCs (uLobbyNpc: villages, Hubs) fade in within a distance from the game's table (2500 units, 1800 for some)
+// and out beyond it; tools/gen.py PATCHES hands its square here. [Graphics] DrawDistance scales it, 0 is no limit.
+float npc_fade_dist2(float d2) {
+    float m = config_live_draw_distance();
+    return m > 0 ? d2 * m * m : FLT_MAX;
+}
+
 // A picture shape: "Auto" (0), "21:9" / "21/9", or a number (0.5 .. 10).
 static bool parse_aspect(const char *v, float *out) {
     float n, d, a;
@@ -377,6 +335,7 @@ static bool parse_aspect(const char *v, float *out) {
 #define ERR_ICONS "Invalid button icon layout."
 #define ERR_LANGUAGE "Invalid menu language."
 #define ERR_UPDATES "Invalid update setting."
+#define ERR_DRAW "Draw distance must be 0-10 (0: no limit)."
 #define F(x) offsetof(Config, x)
 #define ON_OFF(section, key, field, restart) {section, key, SET_BOOL, F(field), 0, 0, 0, NULL, NULL, restart, ERR_TOGGLE}
 static const int anchor_values[] = {UI_CENTER, UI_21_9, UI_32_9, UI_EDGES}, msaa_values[] = {1, 2, 4, 8};
@@ -400,6 +359,7 @@ const ConfigSetting g_settings[] = {
     ON_OFF("Upscaler", "ObjectMotion", fsr_objmotion, true),
     {"Upscaler", "Reactive", SET_FLOAT, F(fsr_reactive), 0, 0.0f, 1.0f, NULL, NULL, true, ERR_FSR},
     ON_OFF("Upscaler", "AnimSurf", fsr_animsurf, true),
+    {"Graphics", "DrawDistance", SET_FLOAT, F(draw_distance), 0, 0.0f, 10.0f, NULL, NULL, false, ERR_DRAW},
     {"Performance", "FPS|FrameRate", SET_INT, F(fps), 0, 30, 240, NULL, NULL, false, ERR_MISC},
     ON_OFF("Performance", "VSync", vsync, false),
     ON_OFF("Performance", "ShaderPrewarm", shader_prewarm, true),
@@ -407,10 +367,7 @@ const ConfigSetting g_settings[] = {
      NULL, false, ERR_MISC},
     {"Controls", "MenuConfirm", SET_CHOICE, F(menu_confirm), 0, 0, 0, "Original,South,East", NULL, false, ERR_CONFIRM},
     ON_OFF("Controls", "BackgroundInput", background_input, false),
-    ON_OFF("Controls", "Rumble", controller_rumble, false),
-    {"Mouse", "InvertHorizontal", SET_BOOL, F(camera_invert_horizontal), 0, 0, 0, NULL, NULL, false, ERR_TOGGLE},
-    {"Mouse", "InvertVertical", SET_BOOL, F(camera_invert_vertical), 0, 0, 0, NULL, NULL, false, ERR_TOGGLE},
-    {"Mouse", "Smoothing", SET_FLOAT, F(camera_smoothing), 0, 0.05f, 1.0f, NULL, NULL, false, ERR_MOUSE},
+    {"Controls", "ComboInputWindow", SET_CHOICE, F(combo_window), 0, 0, 0, "Lenient,Strict", NULL, false, ERR_MISC},
     {"Mouse", "MouseSensitivity", SET_FLOAT, F(mouse_sensitivity), 0, 0.1f, 10.0f, NULL, NULL, false, ERR_VIEW},
     {"Multiplayer", "Port", SET_INT, F(ldn_port), 0, 1, 65535, NULL, NULL, true, ERR_NET},
     {"Multiplayer", "Join", SET_TEXT, F(ldn_join), sizeof g_config.ldn_join, 0, 0, NULL, NULL, true, ERR_NET},
@@ -423,6 +380,7 @@ const ConfigSetting g_settings[] = {
     {"Village Quests", "HubHP", SET_FACTOR, F(hp.village), 0, HP_SCALE_MIN, HP_SCALE_MAX, NULL, NULL, true, ERR_VILLAGE},
     ON_OFF("Bonus Content", "BonusContent", bonus_content, true),
     {"Audio", "Volume", SET_INT, F(volume), 0, 0, 100, NULL, NULL, false, ERR_MISC},
+    ON_OFF("Audio", "MuteInBackground", mute_in_background, false),
     ON_OFF("Application", "ConfirmExit", confirm_exit, false),
     {"Application", "Language", SET_CHOICE, F(language), 0, 0, 0, "English|en,Spanish|es", NULL, false, ERR_LANGUAGE},
     {"Application", "ButtonIcons", SET_CHOICE, F(button_icons), 0, 0, 0, "Xbox,Switch,PlayStation", NULL, false, ERR_ICONS},
