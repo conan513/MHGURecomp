@@ -48,6 +48,9 @@ bool plat_wait_process(unsigned long pid); // Restart child waits for old host t
 void plat_standalone(void);
 // Save-data root, created if missing. Windows standalone uses "." beside the game; Linux uses the user's data folder.
 bool plat_user_dir(char *buf, size_t size);
+// The files in a folder and its subfolders, 0 if it can't be read (main.c: whether the player's romfs is complete;
+// the system's own listing, not a stat per file: ~80 ms for the game's 35531 on Windows).
+int plat_count_files(const char *dir);
 void plat_error_box(const char *msg);
 void plat_fatal_notice(void);
 
