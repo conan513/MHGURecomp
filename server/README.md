@@ -23,7 +23,20 @@ go build -o mhgurecomp-hubserver .
 go test ./...
 ```
 
-`GOOS=linux GOARCH=amd64 go build -o mhgurecomp-hubserver .` builds a Linux server on any OS (also `arm64`).
+For this Windows development environment, release-style build scripts are kept outside the repository in
+`F:\mhgu-build-tools`. They run the server tests, then produce trimmed amd64 binaries in
+`F:\mhgu-build-tools\build`:
+
+```
+F:\mhgu-build-tools\Build-HubServer-Windows.bat
+```
+
+```
+F:\mhgu-build-tools\msys64\usr\bin\bash.exe /f/mhgu-build-tools/Build-HubServer-Linux.sh
+```
+
+The Linux script cross-compiles an amd64 Linux binary; the Windows script builds an amd64 Windows executable. Both
+use the Go toolchain installed in the local MSYS2 UCRT64 environment and disable CGO.
 
 ## Run
 

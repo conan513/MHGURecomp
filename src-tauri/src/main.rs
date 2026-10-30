@@ -28,6 +28,7 @@ enum FieldKind {
     Key,
     Resolution,
     RenderResolution,
+    HubServer,
     Text,
 }
 
@@ -557,6 +558,13 @@ const FIELDS: &[Field] = &[
     },
     Field {
         section: "Multiplayer",
+        key: "Server",
+        id: "hubServer",
+        default: "",
+        kind: FieldKind::HubServer,
+    },
+    Field {
+        section: "Multiplayer",
         key: "Port",
         id: "port",
         default: "39500",
@@ -969,6 +977,11 @@ fn validate_settings(settings: &Value) -> HashMap<String, String> {
                     )
                 })
             }
+            FieldKind::HubServer => (value.len() >= 256 || value.contains(['\r', '\n', ';', '#']))
+                .then(|| {
+                    "Hub server must be under 256 bytes and must not contain newlines, ';' or '#'."
+                        .to_string()
+                }),
             FieldKind::Text => (value.len() >= 256 || value.contains(['\r', '\n']))
                 .then(|| format!("{} must be under 256 bytes and fit on one line.", field.key)),
         };
@@ -1454,6 +1467,38 @@ mod tests {
         settings["fsrSharpness"] = json!("0.5");
         settings["fsrUpscaler"] = json!("FSR5");
         assert!(validate_settings(&settings).contains_key("fsrUpscaler"));
+        fs::remove_dir_all(directory).expect("clean temp directory");
+    }
+
+    #[test]
+    fn hub_server_address_is_validated_and_saved() {
+        let directory = temp_directory();
+        let mut settings = read_settings(&directory).expect("load defaults");
+        assert_eq!(settings["hubServer"], "");
+        assert!(validate_settings(&settings).is_empty());
+
+        settings["hubServer"] = json!("hub.example.org:39510");
+        assert!(validate_settings(&settings).is_empty());
+        save_settings(&directory, &settings).expect("save hub server address");
+
+        let output = fs::read_to_string(ini_path(&directory)).expect("read updated ini");
+        assert!(output.contains("[Multiplayer]\nServer = hub.example.org:39510"));
+        let loaded = read_settings(&directory).expect("reload hub server address");
+        assert_eq!(loaded["hubServer"], "hub.example.org:39510");
+
+        settings["hubServer"] = json!("Off");
+        save_settings(&directory, &settings).expect("disable internet hubs");
+        assert_eq!(
+            read_settings(&directory).expect("reload disabled hub server")["hubServer"],
+            "Off"
+        );
+
+        for invalid in ["host;comment", "host#comment", "host\nOther = value"] {
+            settings["hubServer"] = json!(invalid);
+            assert!(validate_settings(&settings).contains_key("hubServer"));
+        }
+        settings["hubServer"] = json!("x".repeat(256));
+        assert!(validate_settings(&settings).contains_key("hubServer"));
         fs::remove_dir_all(directory).expect("clean temp directory");
     }
 

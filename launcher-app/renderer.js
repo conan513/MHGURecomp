@@ -86,7 +86,7 @@ const categoryFields = {
   controller: ['faceButtons', 'backgroundInput', 'rumble', 'comboInputWindow'],
   audio: ['muteInBackground'],
   keyboardMouse: [],
-  multiplayer: ['port', 'join', 'syncSmallMonsters'],
+  multiplayer: ['hubServer', 'port', 'join', 'syncSmallMonsters'],
   gameplay: ['villageQuestsInHub', 'hubHp', 'bonusContent', 'hp1', 'hp2', 'hp3', 'hp4', 'quests'],
 };
 
@@ -221,6 +221,13 @@ const fieldInfo = {
       'D-pad Left', 'D-pad Up', 'D-pad Right', 'D-pad Down',
     ],
     help: 'Choose the Switch button this mouse button activates. The click that captures the mouse is not sent to the game.',
+  },
+  hubServer: {
+    label: 'Hub server address',
+    kind: 'text',
+    placeholder: 'host.name or host:port',
+    maxLength: 255,
+    help: 'Leave blank to use the default server, or enter Off to disable internet hubs.',
   },
   port: { label: 'Multiplayer port', kind: 'number', min: 1, max: 65535 },
   join: { label: 'Remote hosts', kind: 'text', help: 'Comma-separated addresses of players to join.' },
@@ -377,6 +384,8 @@ function createField(id) {
   } else {
     control = makeElement('input', 'field-control');
     control.type = info.kind === 'number' ? 'number' : 'text';
+    if (info.placeholder) control.placeholder = info.placeholder;
+    if (info.maxLength !== undefined) control.maxLength = info.maxLength;
     if (info.kind === 'number') {
       control.min = String(info.min);
       control.max = String(info.max);
