@@ -54,15 +54,10 @@ static uint32_t g_rw = 1920, g_rh = 1080, g_phases = 8;
 static bool g_test;                 // MHGU_JITTER_TEST
 static float g_test_xy[2];
 static bool g_log;
-static bool g_collision_log;
-static uint32_t g_mouse_cam;
-static bool g_mouse_enabled;
+
 static uint64_t g_mouse_present = UINT64_MAX;
 static float g_mouse_yaw, g_mouse_pitch;
 static float g_mouse_yaw_target, g_mouse_pitch_target;
-static uint64_t g_mouse_pose_present = UINT64_MAX;
-static uint32_t g_mouse_pose_cam;
-static int g_mouse_area = -1;
 
 #define MOUSE_RAD_PER_COUNT (0.06f * 0.017453292519943295f)
 #define CAMERA_GROUND_CLEARANCE 80.0f
@@ -94,41 +89,28 @@ static int current_player_area(void) {
     uint32_t player = LD32(players + 0x1c + slot * 4);
     if (!readable(player, PLAYER_AREA + 1)) return -1;
     int area = (int)LD8(player + PLAYER_AREA);
-    return area <= 12 ? area : -1;
+    return area <= 32 ? area : -1;
 }
 
 static void mouse_camera_apply(uint32_t cam) {
-    if (!g_mouse_enabled || g_mouse_cam != cam) return;
-    if (g_mouse_pose_present == g_present_count && g_mouse_pose_cam == cam) return;
-    g_mouse_pose_present = g_present_count;
-    g_mouse_pose_cam = cam;
+    if (!readable(cam, 0x70)) return;
+
     float target[3] = {LDF(cam + CAM_TARGET), LDF(cam + CAM_TARGET + 4), LDF(cam + CAM_TARGET + 8)};
     float eye[3] = {LDF(cam + CAM_EYE), LDF(cam + CAM_EYE + 4), LDF(cam + CAM_EYE + 8)};
     float delta[3] = {eye[0] - target[0], eye[1] - target[1], eye[2] - target[2]};
     float radius = sqrtf(delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]);
-    if (!(radius > 1.0f) || !isfinite(radius)) return;
+    if (!isfinite(radius) || radius < 1.0f || radius > 10000.0f) return;
 
     float azimuth = atan2f(delta[0], delta[2]) - g_mouse_yaw;
     float elevation = asinf(fmaxf(-1.0f, fminf(1.0f, delta[1] / radius))) + g_mouse_pitch;
-    if (elevation > 1.2f) elevation = 1.2f;
-    if (elevation < -1.2f) elevation = -1.2f;
+    if (elevation > 1.3f) elevation = 1.3f;
+    if (elevation < -1.3f) elevation = -1.3f;
+
     float horizontal = cosf(elevation) * radius;
     float orbit_eye[3] = {target[0] + sinf(azimuth) * horizontal,
                           target[1] + sinf(elevation) * radius,
                           target[2] + cosf(azimuth) * horizontal};
-    if (orbit_eye[1] < target[1] - CAMERA_GROUND_CLEARANCE) {
-        float max_radius = CAMERA_GROUND_CLEARANCE / -sinf(elevation);
-        if (max_radius < radius) {
-            if (g_collision_log)
-                LOG("[camera] frame %llu: ground guard target_y %g eye_y %g radius %g->%g\n",
-                    (unsigned long long)g_present_count, target[1], orbit_eye[1], radius, max_radius);
-            radius = max_radius;
-        }
-    }
-    horizontal = cosf(elevation) * radius;
-    orbit_eye[0] = target[0] + sinf(azimuth) * horizontal;
-    orbit_eye[1] = target[1] + sinf(elevation) * radius;
-    orbit_eye[2] = target[2] + cosf(azimuth) * horizontal;
+
     STF(cam + CAM_EYE, orbit_eye[0]);
     STF(cam + CAM_EYE + 4, orbit_eye[1]);
     STF(cam + CAM_EYE + 8, orbit_eye[2]);
@@ -139,55 +121,44 @@ static void mouse_camera_apply(uint32_t cam) {
 
 static void lookat(Cpu *c) {
     uint32_t out = c->r[0], cam = c->r[1];
-    if (!readable(out, 64) || !readable(cam, 0x70) || !main_aspect(LDF(cam + CAM_ASPECT))) {
+    if (!readable(out, 64) || !readable(cam, 0x70)) {
         fnhook_call_original(c, FN_LOOKAT);
         return;
     }
+
+    // Only the main world camera (far_plane > 500) during an active quest drives
+    // mouse look. Village/hub has no quest -> quest_camera_allowed() = false.
+    // Sub-cameras (lock-on, cutscene, UI) have far_plane < 500 -> filtered out.
+    float this_far = LDF(cam + CAM_FAR);
+    bool is_main = (this_far > 500.0f) && quest_camera_allowed();
+
     pthread_mutex_lock(&g_lock);
-    bool enabled = quest_camera_allowed();
-    int area = enabled ? current_player_area() : -1;
-    if (area >= 0 && area != g_mouse_area) {
-        g_mouse_yaw = g_mouse_pitch = 0;
-        g_mouse_yaw_target = g_mouse_pitch_target = 0;
-        g_mouse_pose_present = UINT64_MAX;
-        g_mouse_pose_cam = 0;
-        g_mouse_area = area;
-    }
-    if (enabled != g_mouse_enabled) {
-        g_mouse_yaw = g_mouse_pitch = 0;
-        g_mouse_yaw_target = g_mouse_pitch_target = 0;
-        g_mouse_pose_present = UINT64_MAX;
-        g_mouse_pose_cam = 0;
-    }
-    g_mouse_enabled = enabled;
-    if (g_mouse_present != g_present_count) {
-        float dx, dy;
-        g_mouse_present = g_present_count;
-        if (enabled && g_mouse_cam != cam) {
-            g_mouse_yaw = g_mouse_pitch = 0;
-            g_mouse_yaw_target = g_mouse_pitch_target = 0;
-        }
-        g_mouse_cam = enabled ? cam : 0;
-        host_input_take_mouse_delta(&dx, &dy);
-        if (enabled) {
+
+    if (is_main) {
+
+        // Consume mouse delta exactly once per presented frame
+        if (g_mouse_present != g_present_count) {
+            float dx = 0.0f, dy = 0.0f;
+            g_mouse_present = g_present_count;
+            host_input_take_mouse_delta(&dx, &dy);
             float invert_x = g_config.camera_invert_horizontal ? -1.0f : 1.0f;
             float invert_y = g_config.camera_invert_vertical ? -1.0f : 1.0f;
             g_mouse_yaw_target += dx * g_config.mouse_sensitivity * invert_x * MOUSE_RAD_PER_COUNT;
             g_mouse_pitch_target += dy * g_config.mouse_sensitivity * invert_y * MOUSE_RAD_PER_COUNT;
-            if (g_mouse_pitch_target > 1.2f) g_mouse_pitch_target = 1.2f;
-            if (g_mouse_pitch_target < -1.2f) g_mouse_pitch_target = -1.2f;
+            if (g_mouse_pitch_target > 1.3f) g_mouse_pitch_target = 1.3f;
+            if (g_mouse_pitch_target < -1.3f) g_mouse_pitch_target = -1.3f;
             g_mouse_yaw += remainderf(g_mouse_yaw_target - g_mouse_yaw, 6.28318531f) * g_config.camera_smoothing;
             g_mouse_pitch += (g_mouse_pitch_target - g_mouse_pitch) * g_config.camera_smoothing;
-            if (g_mouse_pitch > 1.2f) g_mouse_pitch = 1.2f;
-            if (g_mouse_pitch < -1.2f) g_mouse_pitch = -1.2f;
+            if (g_mouse_pitch > 1.3f) g_mouse_pitch = 1.3f;
+            if (g_mouse_pitch < -1.3f) g_mouse_pitch = -1.3f;
             g_mouse_yaw = remainderf(g_mouse_yaw, 6.28318531f);
-        } else {
-            g_mouse_yaw = g_mouse_pitch = 0;
-            g_mouse_yaw_target = g_mouse_pitch_target = 0;
         }
+
+        mouse_camera_apply(cam);
     }
-    mouse_camera_apply(cam);
+
     fnhook_call_original(c, FN_LOOKAT);
+
     float view[16];
     memcpy(view, G2H(out), 64);
     memcpy(G2H(out), view, 64);
@@ -195,7 +166,7 @@ static void lookat(Cpu *c) {
     while (i < g_nviews && g_views[i].cam != cam) i++;
     if (i == g_nviews) {
         if (g_nviews < 8) g_nviews++;
-        else i = 7;  // (more cameras than that: the last slot is reused)
+        else i = 7;
     }
     g_views[i].cam = cam;
     memcpy(g_views[i].m, view, 64);
@@ -205,29 +176,49 @@ static void lookat(Cpu *c) {
 static void projection(Cpu *c) {
     uint32_t out = c->r[0], cam = c->r[1];
     fnhook_call_original(c, FN_PROJECTION);
-    if (!readable(out, 64) || !readable(cam, 0x70) || !main_aspect(LDF(cam + CAM_ASPECT))) return;
+    if (!readable(out, 64) || !readable(cam, 0x70)) return;
+
     float m[16];
     memcpy(m, G2H(out), 64);
     pthread_mutex_lock(&g_lock);
+
     int v = 0;
     while (v < g_nviews && g_views[v].cam != cam) v++;
-    if (v == g_nviews) { pthread_mutex_unlock(&g_lock); return; }  // (no view of this camera yet)
+    if (v == g_nviews) { pthread_mutex_unlock(&g_lock); return; }
+
+    float cam_far = LDF(cam + CAM_FAR);
+    float cam_near = LDF(cam + CAM_NEAR);
+
+    // Pick the camera with the larger far_plane as the authoritative scene camera for SSAO
+    CamRecord *curr = (g_seq > 0) ? &g_ring[g_seq % RING] : NULL;
+    CamRecord *r;
+    if (curr && curr->present == g_present_count) {
+        if (cam_far < curr->far_plane) {
+            pthread_mutex_unlock(&g_lock);
+            return;
+        }
+        r = curr;
+    } else {
+        r = &g_ring[++g_seq % RING];
+    }
+
     float jx = 0, jy = 0;
     if (g_test) {
         jx = g_test_xy[0], jy = g_test_xy[1];
-    } else if (g_on) {  // AMD's sequence: Halton(2, 3) - 0.5, phases = 8 (output / render)^2, one phase per frame
+    } else if (g_on) {
         uint32_t i = (uint32_t)(g_present_count % g_phases);
         jx = halton(i + 1, 2) - 0.5f;
         jy = halton(i + 1, 3) - 0.5f;
     }
-    CamRecord *r = &g_ring[++g_seq % RING];
+
     memset(r, 0, sizeof *r);
     r->seq = g_seq;
     r->present = g_present_count;
     memcpy(r->view, g_views[v].m, 64);
     memcpy(r->proj, m, 64);
     r->jitter[0] = jx, r->jitter[1] = jy;
-    r->far_plane = LDF(cam + CAM_FAR), r->near_plane = LDF(cam + CAM_NEAR);
+    r->far_plane = cam_far;
+    r->near_plane = cam_near;
     r->fovy = m[5] > 0 ? 2.0f * atanf(1.0f / m[5]) : 1.0f;
     r->cam = cam;
     uint64_t seq = g_seq;
@@ -235,7 +226,8 @@ static void projection(Cpu *c) {
     r->gpu9 = m[9] + 2.0f * jy / (float)g_rh;
     float g8 = r->gpu8, g9 = r->gpu9;
     pthread_mutex_unlock(&g_lock);
-    if (jx != 0 || jy != 0) {  // into the GPU's copy of the projection only (see the top)
+
+    if (jx != 0 || jy != 0) {
         STF(out + 0x20, g8);
         STF(out + 0x24, g9);
     }
@@ -273,7 +265,6 @@ void camjit_init(void) {
     const char *e = getenv("MHGU_JITTER_TEST");
     g_test = e && sscanf(e, "%f,%f", &g_test_xy[0], &g_test_xy[1]) == 2;
     g_log = getenv("MHGU_JITTER_LOG") != NULL;
-    g_collision_log = getenv("MHGU_CAMERA_COLLISION_LOG") != NULL;
     g_rw = g_render_size[0], g_rh = g_render_size[1];
     fnhook_set(FN_LOOKAT, hle_register("camjit:lookat", lookat));
     fnhook_set(FN_PROJECTION, hle_register("camjit:projection", projection));
