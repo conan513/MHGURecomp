@@ -39,6 +39,9 @@
 #define CAM_UP        0x50u
 #define CAM_TARGET    0x60u
 #define G_SQUEST      0x1a8ad90u
+#define G_SPLAYER     0x1a85b58u
+#define G_MEMBER      0x1a8ca48u
+#define PLAYER_AREA   0x1054u
 #define RING          64u
 
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -59,6 +62,7 @@ static float g_mouse_yaw, g_mouse_pitch;
 static float g_mouse_yaw_target, g_mouse_pitch_target;
 static uint64_t g_mouse_pose_present = UINT64_MAX;
 static uint32_t g_mouse_pose_cam;
+static int g_mouse_area = -1;
 
 #define MOUSE_RAD_PER_COUNT (0.06f * 0.017453292519943295f)
 #define CAMERA_GROUND_CLEARANCE 80.0f
@@ -80,6 +84,17 @@ static bool quest_camera_allowed(void) {
     if (!readable(quest, 0xa8)) return false;
     uint32_t data = LD32(quest + 0xa4);
     return readable(data, 0x0c) && LD32(data + 8) != 0;
+}
+
+static int current_player_area(void) {
+    uint32_t players = LD32(G_SPLAYER), member = LD32(G_MEMBER);
+    if (!readable(players, 0x2c) || !readable(member, 0x34)) return -1;
+    uint32_t slot = LD32(member + 0x30);
+    if (slot > 3) return -1;
+    uint32_t player = LD32(players + 0x1c + slot * 4);
+    if (!readable(player, PLAYER_AREA + 1)) return -1;
+    int area = (int)LD8(player + PLAYER_AREA);
+    return area <= 12 ? area : -1;
 }
 
 static void mouse_camera_apply(uint32_t cam) {
@@ -130,6 +145,14 @@ static void lookat(Cpu *c) {
     }
     pthread_mutex_lock(&g_lock);
     bool enabled = quest_camera_allowed();
+    int area = enabled ? current_player_area() : -1;
+    if (area >= 0 && area != g_mouse_area) {
+        g_mouse_yaw = g_mouse_pitch = 0;
+        g_mouse_yaw_target = g_mouse_pitch_target = 0;
+        g_mouse_pose_present = UINT64_MAX;
+        g_mouse_pose_cam = 0;
+        g_mouse_area = area;
+    }
     if (enabled != g_mouse_enabled) {
         g_mouse_yaw = g_mouse_pitch = 0;
         g_mouse_yaw_target = g_mouse_pitch_target = 0;
