@@ -877,9 +877,11 @@ static float uf11(uint32_t v, int mbits) {  // unsigned small float: 5-bit expon
 // (the pass's own colour target 0: st.rt already names the next pass's targets when this one ends)
 static NvnTexture *dump_tex, *dump_depth;
 static NvnTexture *present_depth;
+static NvnTexture *present_scene_color;
 static uint64_t present_depth_area;
 static bool present_loading;
 static bool present_ssao_applied;
+static bool scene_had_depth_write;
 static VkPipelineLayout ssao_layout;
 static VkDescriptorSetLayout ssao_set_layout;
 static void ssao_apply_scene(NvnTexture *color, NvnTexture *depth);
@@ -3198,23 +3200,13 @@ static bool movie_viewport(NvnTexture *y, const float *vp, float out[4]) {
 }
 
 static void ssao_before_ui_draw(void) {
-    if (st.ds[0] || !st.ubuf[0][0].addr || !guest_range_ok(st.ubuf[0][0].addr, 64)) return;
-    float ui[16];
-    memcpy(ui, G2H((uint32_t)st.ubuf[0][0].addr), sizeof ui);
-    float pos_x = ui[12], pos_y = ui[13], pos_z = ui[14];
-    bool ui_layer = pos_z >= 94.0f && pos_z <= 110.0f && fabsf(pos_z - roundf(pos_z)) < 0.01f &&
-                    pos_x >= -64.0f && pos_x <= (float)g_ui_size[0] + 64.0f && pos_y >= -64.0f && pos_y <= 784.0f;
-    if (!ui_layer) return;
-    bool fullscreen = (fabsf(pos_x - 640.0f) < 1.0f && fabsf(pos_y - 360.0f) < 1.0f &&
-                       (fabsf(ui[0]) >= 1200.0f || fabsf(ui[5]) >= 700.0f)) ||
-                      (fabsf(pos_x) <= 1.0f && fabsf(pos_y) <= 1.0f);
-    if (fabsf(pos_z - 110.0f) < 0.5f &&
-        (fabsf(pos_y - 168.0f) < 0.3f || fabsf(pos_y - 433.0f) < 0.3f || fabsf(pos_y - 570.0f) < 0.3f ||
-         fullscreen)) {
-        ui_loading_pass = present_loading = true;
+    if (present_ssao_applied || !g_config.ssao || g_fsr_on) return;
+    if (!scene_had_depth_write || !present_depth) return;
+    if (st.ds[0]) return; // 3D draws have depth-test enabled; UI/HUD draws disable depth test
+    NvnTexture *sc = present_scene_color ? present_scene_color : (st.rt.ncolor ? st.rt.color[0] : NULL);
+    if (sc) {
+        ssao_apply_scene(sc, present_depth);
     }
-    if (!present_loading && st.rt.ncolor && st.rt.color[0] && !g_fsr_on)
-        ssao_apply_scene(st.rt.color[0], present_depth);
 }
 
 static void draw(CmdRec *r, bool indexed) {
@@ -3235,6 +3227,17 @@ static void draw(CmdRec *r, bool indexed) {
     VkPrimitiveTopology topo;
     bool native = topology(mode, &topo);
     if (!native && mode != 6 && mode != 7 && mode != 9) { stat_skipped++; return; }
+    bool is_dw = st.ds[0] && st.ds[1];
+    if (is_dw && st.rt.depth && st.rt.ncolor && st.rt.color[0]) {
+        uint64_t area = (uint64_t)st.rt.depth->width * st.rt.depth->height;
+        if (area >= present_depth_area) {
+            present_depth = st.rt.depth;
+            present_scene_color = st.rt.color[0];
+            present_depth_area = area;
+            scene_had_depth_write = true;
+        }
+    }
+    ssao_before_ui_draw();
     if (g_fsr_on) {  // FSR: the frame's structure; at the start of the HUD FSR runs before this draw (fsr.c)
         FsrDraw fd = {.color0 = st.rt.ncolor ? st.rt.color[0] : NULL, .depth = st.rt.depth, .count = (uint32_t)r->x[2],
                       .depth_write = st.ds[0] && st.ds[1], .vubuf = &st.ubuf[0][0].addr, .nvubuf = 18};
@@ -3242,7 +3245,6 @@ static void draw(CmdRec *r, bool indexed) {
         vk_fsr_draw(&fd);
     }
 
-    ssao_before_ui_draw();
     if (st.rt_dirty) vk_end_pass();  // (MSAA: the ending pass marks its targets for resolving before they are read)
     ms_resolve_sampled(0, pr->vi);
     ms_resolve_sampled(1, pr->fi);
@@ -3538,7 +3540,11 @@ static void draw(CmdRec *r, bool indexed) {
     else vkCmdDrawIndexed(cb, icount, inst, 0, base_vertex, base_inst);
     if (k.depth_write && st.rt.depth && st.rt.ncolor && st.rt.color[0]) {
         uint64_t area = (uint64_t)st.rt.depth->width * st.rt.depth->height;
-        if (area >= present_depth_area) present_depth = st.rt.depth, present_depth_area = area;
+        if (area >= present_depth_area) {
+            present_depth = st.rt.depth;
+            present_scene_color = st.rt.color[0];
+            present_depth_area = area;
+        }
     }
     stat_draws++;
     if (g_fsr_objvel && pr->fsrcap && (k.depth_write || (k.depth_test && pr->vi->cbuf_dynamic)) && inst == 1 && pass_samples == 1) {
@@ -3730,12 +3736,14 @@ static VkDescriptorSetLayout present_set_layout;
 VkImageView vk_present_depth(uint32_t *width, uint32_t *height) {
     NvnTexture *t = present_depth;
     present_depth = NULL;
+    present_scene_color = NULL;
     present_depth_area = 0;
-    bool loading = present_loading;
+    scene_had_depth_write = false;
     bool ssao_applied = present_ssao_applied;
     present_loading = false;
     present_ssao_applied = false;
-    if (!g_config.ssao || loading || ssao_applied || !t || !t->backend) return VK_NULL_HANDLE;
+    // If SSAO was already applied mid-frame (scene boundary trigger), don't apply again in present.frag
+    if (!g_config.ssao || ssao_applied || !t || !t->backend) return VK_NULL_HANDLE;
     TexBackend *b = t->backend;
     if (!(b->aspect & VK_IMAGE_ASPECT_DEPTH_BIT) || !b->width || !b->height) return VK_NULL_HANDLE;
     vk_ms_resolve(b);
@@ -3804,6 +3812,8 @@ static void ssao_apply_scene(NvnTexture *color, NvnTexture *depth) {
     vk_end_pass();
     vk_ms_resolve(cb);
     vk_ms_resolve(db);
+    cb->ms_valid = false;
+    db->ms_valid = false;
     VkImageView cv = vk_view(color, NULL, false, true, TEXTYPE_2D);
     VkImageView dv = vk_view(depth, NULL, false, false, TEXTYPE_2D);
     if (!cv || !dv) return;
@@ -3848,6 +3858,7 @@ void vk_ssao_apply_scene(NvnTexture *color, NvnTexture *depth) {
 
 void vk_present_depth_forget(NvnTexture *t) {
     if (present_depth == t) present_depth = NULL, present_depth_area = 0;
+    if (present_scene_color == t) present_scene_color = NULL;
 }
 
 static VkPipeline present_pipeline(void) {

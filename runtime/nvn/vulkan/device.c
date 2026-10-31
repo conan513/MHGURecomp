@@ -561,7 +561,7 @@ void backend_present(NvnTexture *t) {
     if (depth && (uint64_t)b->width * depth_h != (uint64_t)b->height * depth_w) depth = VK_NULL_HANDLE;
     float near_plane = 8.0f, far_plane = 50000.0f;
     CamRecord camera;
-    if (depth && camjit_latest(&camera) && camera.present + 1 >= g_present_count &&
+    if (depth && camjit_latest(&camera) &&
         camera.near_plane > 0.0f && camera.far_plane > camera.near_plane) {
         near_plane = camera.near_plane;
         far_plane = camera.far_plane;

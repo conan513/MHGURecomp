@@ -189,18 +189,7 @@ static void projection(Cpu *c) {
     float cam_far = LDF(cam + CAM_FAR);
     float cam_near = LDF(cam + CAM_NEAR);
 
-    // Pick the camera with the larger far_plane as the authoritative scene camera for SSAO
-    CamRecord *curr = (g_seq > 0) ? &g_ring[g_seq % RING] : NULL;
-    CamRecord *r;
-    if (curr && curr->present == g_present_count) {
-        if (cam_far < curr->far_plane) {
-            pthread_mutex_unlock(&g_lock);
-            return;
-        }
-        r = curr;
-    } else {
-        r = &g_ring[++g_seq % RING];
-    }
+    CamRecord *r = &g_ring[++g_seq % RING];
 
     float jx = 0, jy = 0;
     if (g_test) {
