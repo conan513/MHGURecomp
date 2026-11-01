@@ -14,7 +14,7 @@ enum { COMBO_LENIENT, COMBO_STRICT };  // [Controls] ComboInputWindow (runtime/h
 enum { MENU_CONFIRM_ORIGINAL, MENU_CONFIRM_SOUTH, MENU_CONFIRM_EAST };
 enum { FXAA_ORIGINAL, FXAA_311 };  // [Anti-aliasing] FXAAMode (runtime/nvn/vulkan/exec.c)
 
-// [Keybinds]: the keyboard and mouse controls (runtime/host_input.c), in the file's order. Each takes up to two keys
+// [Keybinds]: the keyboard and mouse controls (runtime/host_input.c), in the file's order. Each takes up to four keys
 // or mouse buttons: an SDL scancode, KEY_MOUSE + SDL_BUTTON_*, or the wheel's KEY_WHEEL_UP / KEY_WHEEL_DOWN (0: none).
 // BIND_ITEM_LEFT / RIGHT turn the item bar directly (runtime/hle/itembar.c), not a Switch button.
 enum {
@@ -23,7 +23,7 @@ enum {
     BIND_DPAD_UP, BIND_DPAD_DOWN, BIND_DPAD_LEFT, BIND_DPAD_RIGHT, BIND_LSTICK, BIND_RSTICK,
     BIND_ITEM_LEFT, BIND_ITEM_RIGHT, BINDS
 };
-#define BIND_KEYS 2
+#define BIND_KEYS 4
 #define KEY_MOUSE 0x1000
 #define KEY_WHEEL_UP (KEY_MOUSE + 0x10)
 #define KEY_WHEEL_DOWN (KEY_MOUSE + 0x11)

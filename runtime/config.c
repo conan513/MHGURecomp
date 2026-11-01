@@ -19,11 +19,19 @@
 
 #include "keymap.h"
 
-#define DEFAULT_BINDS {{SDL_SCANCODE_W}, {SDL_SCANCODE_S}, {SDL_SCANCODE_A}, {SDL_SCANCODE_D}, {SDL_SCANCODE_LSHIFT},     \
-    {KEY_MOUSE + SDL_BUTTON_RIGHT}, {SDL_SCANCODE_SPACE}, {KEY_MOUSE + SDL_BUTTON_LEFT},                               \
-    {SDL_SCANCODE_R, KEY_MOUSE + SDL_BUTTON_MIDDLE},                                                                   \
-    {SDL_SCANCODE_Q}, {SDL_SCANCODE_E}, {SDL_SCANCODE_TAB}, {SDL_SCANCODE_T}, {SDL_SCANCODE_RETURN, SDL_SCANCODE_KP_ENTER}, \
-    {SDL_SCANCODE_BACKSPACE}, {SDL_SCANCODE_UP}, {SDL_SCANCODE_DOWN}, {SDL_SCANCODE_LEFT}, {SDL_SCANCODE_RIGHT},          \
+#define DEFAULT_BINDS {{SDL_SCANCODE_W}, {SDL_SCANCODE_S}, {SDL_SCANCODE_A}, {SDL_SCANCODE_D}, {SDL_SCANCODE_LSHIFT}, \
+    {SDL_SCANCODE_F, SDL_SCANCODE_RETURN, KEY_MOUSE + SDL_BUTTON_RIGHT}, {SDL_SCANCODE_SPACE, SDL_SCANCODE_BACKSPACE}, \
+    {SDL_SCANCODE_G, SDL_SCANCODE_H, KEY_MOUSE + SDL_BUTTON_LEFT}, {SDL_SCANCODE_E, SDL_SCANCODE_T},                  \
+    {SDL_SCANCODE_Q, SDL_SCANCODE_U}, {SDL_SCANCODE_LSHIFT, SDL_SCANCODE_RSHIFT}, {SDL_SCANCODE_TAB, SDL_SCANCODE_Z}, \
+    {SDL_SCANCODE_R, SDL_SCANCODE_B}, {SDL_SCANCODE_KP_ENTER}, {SDL_SCANCODE_C, SDL_SCANCODE_V},                     \
+    {SDL_SCANCODE_1, SDL_SCANCODE_UP}, {SDL_SCANCODE_3, SDL_SCANCODE_DOWN}, {SDL_SCANCODE_4, SDL_SCANCODE_LEFT},     \
+    {SDL_SCANCODE_2, SDL_SCANCODE_RIGHT}, {SDL_SCANCODE_LCTRL, SDL_SCANCODE_LALT},                                   \
+    {SDL_SCANCODE_LALT, SDL_SCANCODE_RCTRL}, {KEY_WHEEL_UP}, {KEY_WHEEL_DOWN}}
+#define PREVIOUS_UPSTREAM_BINDS {{SDL_SCANCODE_W}, {SDL_SCANCODE_S}, {SDL_SCANCODE_A}, {SDL_SCANCODE_D}, {SDL_SCANCODE_LSHIFT}, \
+    {KEY_MOUSE + SDL_BUTTON_RIGHT}, {SDL_SCANCODE_SPACE}, {KEY_MOUSE + SDL_BUTTON_LEFT},                             \
+    {SDL_SCANCODE_R, KEY_MOUSE + SDL_BUTTON_MIDDLE}, {SDL_SCANCODE_Q}, {SDL_SCANCODE_E}, {SDL_SCANCODE_TAB},        \
+    {SDL_SCANCODE_T}, {SDL_SCANCODE_RETURN, SDL_SCANCODE_KP_ENTER}, {SDL_SCANCODE_BACKSPACE},                       \
+    {SDL_SCANCODE_UP}, {SDL_SCANCODE_DOWN}, {SDL_SCANCODE_LEFT}, {SDL_SCANCODE_RIGHT},                              \
     {SDL_SCANCODE_LCTRL, SDL_SCANCODE_RCTRL}, {SDL_SCANCODE_LALT, SDL_SCANCODE_RALT}, {KEY_WHEEL_UP}, {KEY_WHEEL_DOWN}}
 #define CONFIG_DEFAULT_VALUES                                                                                           \
     {                                                                                                                   \
@@ -40,6 +48,7 @@
     }
 Config g_config = CONFIG_DEFAULT_VALUES;
 Config config_defaults(void) { return (Config)CONFIG_DEFAULT_VALUES; }
+static const int previous_upstream_binds[BINDS][BIND_KEYS] = PREVIOUS_UPSTREAM_BINDS;
 uint32_t g_render_size[2] = {1920, 1080};
 float g_render_aspect = 16.0f / 9.0f;
 float g_fov_scale = 1.0f;
@@ -187,7 +196,7 @@ static const char DEFAULT_INI[] =
     "[Keybinds]\n"
     "; The keys or mouse buttons for each Switch button, for moving (the left stick) and for turning the item bar\n"
     "; (ItemLeft / ItemRight: one item per press, in a hunt, without holding L).\n"
-    "; Up to two each, separated by a comma, or None.\n"
+    "; Up to four each, separated by a comma, or None.\n"
     "; Mouse buttons: Mouse Left, Mouse Right, Mouse Middle, Mouse 4, Mouse 5, Wheel Up, Wheel Down.\n"
     "; Esc, Insert, F1 and F7 to F12 are the recomp's own keys.\n"
     "MoveUp = W\n"
@@ -195,22 +204,22 @@ static const char DEFAULT_INI[] =
     "MoveLeft = A\n"
     "MoveRight = D\n"
     "Walk = Left Shift\n"
-    "A = Mouse Right\n"
-    "B = Space\n"
-    "X = Mouse Left\n"
-    "Y = R, Mouse Middle\n"
-    "L = Q\n"
-    "R = E\n"
-    "ZL = Tab\n"
-    "ZR = T\n"
-    "Plus = Return, Keypad Enter\n"
-    "Minus = Backspace\n"
-    "DpadUp = Up\n"
-    "DpadDown = Down\n"
-    "DpadLeft = Left\n"
-    "DpadRight = Right\n"
-    "LeftStickClick = Left Ctrl, Right Ctrl\n"
-    "RightStickClick = Left Alt, Right Alt\n"
+    "A = F, Return, Mouse Right\n"
+    "B = Space, Backspace\n"
+    "X = G, H, Mouse Left\n"
+    "Y = E, T\n"
+    "L = Q, U\n"
+    "R = Left Shift, Right Shift\n"
+    "ZL = Tab, Z\n"
+    "ZR = R, B\n"
+    "Plus = Keypad Enter\n"
+    "Minus = C, V\n"
+    "DpadUp = 1, Up\n"
+    "DpadDown = 3, Down\n"
+    "DpadLeft = 4, Left\n"
+    "DpadRight = 2, Right\n"
+    "LeftStickClick = Left Ctrl, Left Alt\n"
+    "RightStickClick = Left Alt, Right Ctrl\n"
     "ItemLeft = Wheel Up\n"
     "ItemRight = Wheel Down\n"
     "\n"
@@ -812,6 +821,94 @@ static void set_key(const char *key, char *val, int line) {
         LOG("[config] line %d: \"%s\" is not a value %s takes; using the default\n", line, val, key);
 }
 
+static int legacy_bind_slot(const char *key, int *slot) {
+    static const struct { const char *key; int bind, slot; } legacy[] = {
+        {"StickUp", BIND_MOVE_UP, 0}, {"StickDown", BIND_MOVE_DOWN, 0},
+        {"StickLeft", BIND_MOVE_LEFT, 0}, {"StickRight", BIND_MOVE_RIGHT, 0},
+        {"ButtonA", BIND_A, 0}, {"ButtonAAlt", BIND_A, 1},
+        {"ButtonB", BIND_B, 0}, {"ButtonBAlt", BIND_B, 1},
+        {"ButtonX", BIND_X, 0}, {"ButtonXAlt", BIND_X, 1},
+        {"ButtonY", BIND_Y, 0}, {"ButtonYAlt", BIND_Y, 1},
+        {"ButtonL", BIND_L, 0}, {"ButtonLAlt", BIND_L, 1},
+        {"ButtonR", BIND_R, 0}, {"ButtonRAlt", BIND_R, 1},
+        {"ButtonZL", BIND_ZL, 0}, {"ButtonZLAlt", BIND_ZL, 1},
+        {"ButtonZR", BIND_ZR, 0}, {"ButtonZRAlt", BIND_ZR, 1},
+        {"ButtonPlus", BIND_PLUS, 0}, {"ButtonPlusAlt", BIND_PLUS, 1},
+        {"ButtonPlusAlt2", BIND_PLUS, 2},
+        {"ButtonMinus", BIND_MINUS, 0}, {"ButtonMinusAlt", BIND_MINUS, 1},
+        {"ButtonLeftStick", BIND_LSTICK, 0}, {"ButtonLeftStickAlt", BIND_LSTICK, 1},
+        {"ButtonRightStick", BIND_RSTICK, 0}, {"ButtonRightStickAlt", BIND_RSTICK, 1},
+        {"DpadUp", BIND_DPAD_UP, 0}, {"DpadUpAlt", BIND_DPAD_UP, 1},
+        {"DpadDown", BIND_DPAD_DOWN, 0}, {"DpadDownAlt", BIND_DPAD_DOWN, 1},
+        {"DpadLeft", BIND_DPAD_LEFT, 0}, {"DpadLeftAlt", BIND_DPAD_LEFT, 1},
+        {"DpadRight", BIND_DPAD_RIGHT, 0}, {"DpadRightAlt", BIND_DPAD_RIGHT, 1},
+    };
+    for (size_t i = 0; i < sizeof legacy / sizeof *legacy; i++) {
+        if (!strcasecmp(key, legacy[i].key)) {
+            *slot = legacy[i].slot;
+            return legacy[i].bind;
+        }
+    }
+    return -1;
+}
+
+static int legacy_mouse_bind(const char *key, int *button) {
+    static const struct { const char *key; int button; } mouse[] = {
+        {"LeftButton", SDL_BUTTON_LEFT}, {"RightButton", SDL_BUTTON_RIGHT},
+        {"MiddleButton", SDL_BUTTON_MIDDLE}, {"X1Button", SDL_BUTTON_X1}, {"X2Button", SDL_BUTTON_X2},
+    };
+    for (size_t i = 0; i < sizeof mouse / sizeof *mouse; i++) {
+        if (!strcasecmp(key, mouse[i].key)) {
+            *button = mouse[i].button;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int legacy_mouse_target(const char *value) {
+    static const struct { const char *key; int bind; } targets[] = {
+        {"A", BIND_A}, {"B", BIND_B}, {"X", BIND_X}, {"Y", BIND_Y},
+        {"L", BIND_L}, {"R", BIND_R}, {"ZL", BIND_ZL}, {"ZR", BIND_ZR},
+        {"Plus", BIND_PLUS}, {"Minus", BIND_MINUS},
+    };
+    for (size_t i = 0; i < sizeof targets / sizeof *targets; i++)
+        if (!strcasecmp(value, targets[i].key)) return targets[i].bind;
+    return -1;
+}
+
+static bool set_legacy_binding(Config *legacy, bool seen[BINDS], const char *section, const char *key,
+                               const char *value) {
+    int slot = 0, bind = -1;
+    if (!strcasecmp(section, "Keyboard")) {
+        bind = legacy_bind_slot(key, &slot);
+        if (bind < 0) return false;
+        if (slot >= BIND_KEYS) return true;
+        int code = strcasecmp(value, "None") ? config_key_code(value) : 0;
+        if (code && key_reserved(code)) code = 0;
+        legacy->binds[bind][slot] = code;
+        seen[bind] = true;
+        return true;
+    }
+    if (strcasecmp(section, "Mouse")) return false;
+    int button;
+    if (!legacy_mouse_bind(key, &button)) return false;
+    bind = legacy_mouse_target(value);
+    if (bind < 0) return true;
+    int code = KEY_MOUSE + button;
+    for (int i = 0; i < BIND_KEYS; i++)
+        if (!legacy->binds[bind][i]) {
+            legacy->binds[bind][i] = code;
+            seen[bind] = true;
+            return true;
+        }
+    return true;
+}
+
+static bool uses_previous_upstream_default(int bind) {
+    return !memcmp(g_config.binds[bind], previous_upstream_binds[bind], sizeof g_config.binds[bind]);
+}
+
 static char *trim(char *s) {
     while (isspace((unsigned char)*s)) s++;
     char *e = s + strlen(s);
@@ -858,11 +955,16 @@ void config_load(void) {
         else LOG("[config] %s is missing and could not be written; using the defaults\n", path);
     } else {
         char buf[512], seen[512] = "|";
+        char section[64] = "";
+        Config defaults = config_defaults(), legacy = config_defaults();
+        memset(legacy.binds, 0, sizeof legacy.binds);
+        bool legacy_seen[BINDS] = {0}, current_seen[BINDS] = {0};
         int line = 0;
         while (fgets(buf, sizeof buf, f)) {
             line++;
             char *s = trim(buf);
             if (*s == '[' && strchr(s, ']') && strlen(seen) + strlen(s) + 2 < sizeof seen) {
+                snprintf(section, sizeof section, "%.*s", (int)(strchr(s, ']') - s - 1), s + 1);
                 for (char *q = s + 1; *q != ']'; q++) {
                     size_t n = strlen(seen);
                     seen[n] = (char)tolower((unsigned char)*q), seen[n + 1] = 0;
@@ -875,9 +977,28 @@ void config_load(void) {
             *eq = 0;
             char *val = trim(eq + 1), *cmt = strpbrk(val, ";#");
             if (cmt) *cmt = 0;
-            set_key(trim(s), trim(val), line);
+            char *key = trim(s);
+            val = trim(val);
+            bool is_legacy = set_legacy_binding(&legacy, legacy_seen, section, key, val);
+            if (!is_legacy && !strcasecmp(section, "Keybinds")) {
+                const ConfigSetting *setting = config_setting(key);
+                for (int i = 0; i < BINDS; i++)
+                    if (setting && setting == config_bind_setting(i)) current_seen[i] = true;
+            }
+            if (!is_legacy) set_key(key, val, line);
         }
         fclose(f);
+        bool migrated_legacy = false;
+        for (int i = 0; i < BINDS; i++) {
+            if (legacy_seen[i] && (!current_seen[i] || uses_previous_upstream_default(i))) {
+                memcpy(g_config.binds[i], legacy.binds[i], sizeof g_config.binds[i]);
+                migrated_legacy = true;
+            } else if (current_seen[i] && uses_previous_upstream_default(i)) {
+                memcpy(g_config.binds[i], defaults.binds[i], sizeof g_config.binds[i]);
+            }
+        }
+        if (migrated_legacy && strlen(seen) + sizeof "keybinds|" < sizeof seen)
+            strcat(seen, "keybinds|");
         append_missing_sections(path, seen);
     }
     // Keep Auto/Desktop and file values, rather than persisting temporary environment overrides.

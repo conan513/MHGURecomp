@@ -217,7 +217,7 @@ int main() {
     press(ImGuiKey_GamepadDpadUp);
     confirm();
     assert(config_live_menu_confirm() == MENU_CONFIRM_ORIGINAL);
-    // The Keybinds submenu: a key chosen for B, then a mouse button as its second; the recomp's own keys refused
+    // The Keybinds submenu: a key chosen for B, then a mouse button added; the recomp's own keys refused
     press(ImGuiKey_Home);
     down(6);
     selected("keybinds");
@@ -237,7 +237,7 @@ int main() {
     selected("bind.6");
     confirm();
     down();
-    selected("choice.1");  // Add a second key
+    selected("choice.1");  // Add another key
     confirm();
     assert(settings_panel_mouse(SDL_BUTTON_MIDDLE));
     idle();
@@ -262,7 +262,9 @@ int main() {
     press(ImGuiKey_End);
     press(ImGuiKey_GamepadDpadUp);
     confirm();
-    assert(config_live_bind(BIND_B, 0) == SDL_SCANCODE_SPACE && !config_live_bind(BIND_B, 1));
+    assert(config_live_bind(BIND_B, 0) == SDL_SCANCODE_SPACE &&
+           config_live_bind(BIND_B, 1) == SDL_SCANCODE_BACKSPACE &&
+           !config_live_bind(BIND_B, 2) && !config_live_bind(BIND_B, 3));
     tab();
     selected("port");
     press(ImGuiKey_GamepadL1);

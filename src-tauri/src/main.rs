@@ -253,112 +253,112 @@ const FIELDS: &[Field] = &[
         section: "Keybinds",
         key: "A",
         id: "bindA",
-        default: "Mouse Right",
+        default: "F, Return, Mouse Right",
         kind: FieldKind::Key,
     },
     Field {
         section: "Keybinds",
         key: "B",
         id: "bindB",
-        default: "Space",
+        default: "Space, Backspace",
         kind: FieldKind::Key,
     },
     Field {
         section: "Keybinds",
         key: "X",
         id: "bindX",
-        default: "Mouse Left",
+        default: "G, H, Mouse Left",
         kind: FieldKind::Key,
     },
     Field {
         section: "Keybinds",
         key: "Y",
         id: "bindY",
-        default: "R, Mouse Middle",
+        default: "E, T",
         kind: FieldKind::Key,
     },
     Field {
         section: "Keybinds",
         key: "L",
         id: "bindL",
-        default: "Q",
+        default: "Q, U",
         kind: FieldKind::Key,
     },
     Field {
         section: "Keybinds",
         key: "R",
         id: "bindR",
-        default: "E",
+        default: "Left Shift, Right Shift",
         kind: FieldKind::Key,
     },
     Field {
         section: "Keybinds",
         key: "ZL",
         id: "bindZl",
-        default: "Tab",
+        default: "Tab, Z",
         kind: FieldKind::Key,
     },
     Field {
         section: "Keybinds",
         key: "ZR",
         id: "bindZr",
-        default: "T",
+        default: "R, B",
         kind: FieldKind::Key,
     },
     Field {
         section: "Keybinds",
         key: "Plus",
         id: "bindPlus",
-        default: "Return, Keypad Enter",
+        default: "Keypad Enter",
         kind: FieldKind::Key,
     },
     Field {
         section: "Keybinds",
         key: "Minus",
         id: "bindMinus",
-        default: "Backspace",
+        default: "C, V",
         kind: FieldKind::Key,
     },
     Field {
         section: "Keybinds",
         key: "DpadUp",
         id: "bindDpadUp",
-        default: "Up",
+        default: "1, Up",
         kind: FieldKind::Key,
     },
     Field {
         section: "Keybinds",
         key: "DpadDown",
         id: "bindDpadDown",
-        default: "Down",
+        default: "3, Down",
         kind: FieldKind::Key,
     },
     Field {
         section: "Keybinds",
         key: "DpadLeft",
         id: "bindDpadLeft",
-        default: "Left",
+        default: "4, Left",
         kind: FieldKind::Key,
     },
     Field {
         section: "Keybinds",
         key: "DpadRight",
         id: "bindDpadRight",
-        default: "Right",
+        default: "2, Right",
         kind: FieldKind::Key,
     },
     Field {
         section: "Keybinds",
         key: "LeftStickClick",
         id: "bindLeftStickClick",
-        default: "Left Ctrl, Right Ctrl",
+        default: "Left Ctrl, Left Alt",
         kind: FieldKind::Key,
     },
     Field {
         section: "Keybinds",
         key: "RightStickClick",
         id: "bindRightStickClick",
-        default: "Left Alt, Right Alt",
+        default: "Left Alt, Right Ctrl",
         kind: FieldKind::Key,
     },
     Field {
@@ -460,6 +460,7 @@ const FIELDS: &[Field] = &[
         kind: FieldKind::Multiplier(0.05, 20.0),
     },
 ];
+const MAX_BIND_KEYS: usize = 4;
 
 const CANONICAL_SECTIONS: &[&str] = &[
     "Display",
@@ -561,6 +562,125 @@ fn parse_ini(lines: &[String]) -> HashMap<String, String> {
     values
 }
 
+fn legacy_keyboard_keys(key: &str) -> &'static [&'static str] {
+    match normalize(key).as_str() {
+        "moveup" => &["StickUp"],
+        "movedown" => &["StickDown"],
+        "moveleft" => &["StickLeft"],
+        "moveright" => &["StickRight"],
+        "a" => &["ButtonA", "ButtonAAlt"],
+        "b" => &["ButtonB", "ButtonBAlt"],
+        "x" => &["ButtonX", "ButtonXAlt"],
+        "y" => &["ButtonY", "ButtonYAlt"],
+        "l" => &["ButtonL", "ButtonLAlt"],
+        "r" => &["ButtonR", "ButtonRAlt"],
+        "zl" => &["ButtonZL", "ButtonZLAlt"],
+        "zr" => &["ButtonZR", "ButtonZRAlt"],
+        "plus" => &["ButtonPlus", "ButtonPlusAlt", "ButtonPlusAlt2"],
+        "minus" => &["ButtonMinus", "ButtonMinusAlt"],
+        "dpadup" => &["DpadUp", "DpadUpAlt"],
+        "dpaddown" => &["DpadDown", "DpadDownAlt"],
+        "dpadleft" => &["DpadLeft", "DpadLeftAlt"],
+        "dpadright" => &["DpadRight", "DpadRightAlt"],
+        "leftstickclick" => &["ButtonLeftStick", "ButtonLeftStickAlt"],
+        "rightstickclick" => &["ButtonRightStick", "ButtonRightStickAlt"],
+        _ => &[],
+    }
+}
+
+fn legacy_mouse_key(key: &str) -> Option<&'static str> {
+    let mouse_key = match normalize(key).as_str() {
+        "leftbutton" => "Mouse Left",
+        "rightbutton" => "Mouse Right",
+        "middlebutton" => "Mouse Middle",
+        "x1button" => "Mouse 4",
+        "x2button" => "Mouse 5",
+        _ => return None,
+    };
+    Some(mouse_key)
+}
+
+fn legacy_mouse_default_target(key: &str) -> Option<&'static str> {
+    match normalize(key).as_str() {
+        "leftbutton" => Some("X"),
+        "rightbutton" => Some("A"),
+        _ => None,
+    }
+}
+
+fn migrate_legacy_binding(values: &HashMap<String, String>, key: &str) -> Option<String> {
+    let mut keys = Vec::new();
+    let mut found = false;
+    for legacy_key in legacy_keyboard_keys(key) {
+        if let Some(value) = values.get(&address("Keyboard", legacy_key)) {
+            found = true;
+            if !value.eq_ignore_ascii_case("None")
+                && valid_key_binding(value)
+                && !keys.iter().any(|key| key == value)
+            {
+                keys.push(value.clone());
+            }
+        }
+    }
+    for mouse_key in ["LeftButton", "RightButton", "MiddleButton", "X1Button", "X2Button"] {
+        let Some(mouse_button) = legacy_mouse_key(mouse_key) else {
+            continue;
+        };
+        let Some(value) = values.get(&address("Mouse", mouse_key)) else {
+            continue;
+        };
+        let matches_binding = normalize(value) == normalize(key);
+        let replaces_old_default = legacy_mouse_default_target(mouse_key)
+            .is_some_and(|target| normalize(target) == normalize(key));
+        if !matches_binding && !replaces_old_default {
+            continue;
+        }
+        found = true;
+        if matches_binding && !keys.iter().any(|binding| normalize(binding) == normalize(mouse_button)) {
+            keys.push(mouse_button.to_string());
+        }
+    }
+    if !found {
+        return None;
+    }
+    keys.truncate(MAX_BIND_KEYS);
+    Some(if keys.is_empty() {
+        "None".to_string()
+    } else {
+        keys.join(", ")
+    })
+}
+
+fn is_previous_upstream_default(key: &str, value: &str) -> bool {
+    let default = match normalize(key).as_str() {
+        "moveup" => "W",
+        "movedown" => "S",
+        "moveleft" => "A",
+        "moveright" => "D",
+        "walk" => "Left Shift",
+        "a" => "Mouse Right",
+        "b" => "Space",
+        "x" => "Mouse Left",
+        "y" => "R, Mouse Middle",
+        "l" => "Q",
+        "r" => "E",
+        "zl" => "Tab",
+        "zr" => "T",
+        "plus" => "Return, Keypad Enter",
+        "minus" => "Backspace",
+        "dpadup" => "Up",
+        "dpaddown" => "Down",
+        "dpadleft" => "Left",
+        "dpadright" => "Right",
+        "leftstickclick" => "Left Ctrl, Right Ctrl",
+        "rightstickclick" => "Left Alt, Right Alt",
+        "itemleft" => "Wheel Up",
+        "itemright" => "Wheel Down",
+        _ => return false,
+    };
+    normalize(default) == normalize(value)
+}
+
 fn read_settings(directory: &Path) -> Result<Value, String> {
     let ini = ini_path(directory);
     let content = match fs::read_to_string(&ini) {
@@ -577,9 +697,23 @@ fn read_settings(directory: &Path) -> Result<Value, String> {
 
     for field in FIELDS {
         let current_address = address(field.section, field.key);
+        let current_value = values.get(&current_address);
         let legacy_address = (field.section == "Controls")
             .then(|| address("Controller", field.key));
-        if let Some(value) = values.get(&current_address).or_else(|| {
+        if field.section == "Keybinds"
+            && current_value.map_or(true, |value| is_previous_upstream_default(field.key, value))
+        {
+            if let Some(value) = migrate_legacy_binding(&values, field.key) {
+                settings.insert(field.id.to_string(), json!(value));
+                continue;
+            } else if current_value.is_some_and(|value| {
+                is_previous_upstream_default(field.key, value) && value != field.default
+            }) {
+                settings.insert(field.id.to_string(), json!(field.default));
+                continue;
+            }
+        }
+        if let Some(value) = current_value.or_else(|| {
             legacy_address.as_ref().and_then(|key| values.get(key))
         }) {
             settings.insert(field.id.to_string(), json!(value));
@@ -723,7 +857,7 @@ fn valid_key_binding(value: &str) -> bool {
         return false;
     }
     let keys = value.split(',').map(str::trim).collect::<Vec<_>>();
-    if keys.is_empty() || keys.len() > 2 || keys.iter().any(|key| key.is_empty()) {
+    if keys.is_empty() || keys.len() > MAX_BIND_KEYS || keys.iter().any(|key| key.is_empty()) {
         return false;
     }
     if keys.len() == 1 && keys[0].eq_ignore_ascii_case("none") {
@@ -773,7 +907,7 @@ fn validate_settings(settings: &Value) -> HashMap<String, String> {
                 .then(|| "AspectRatio must be Auto or a ratio from 0.5 to 10.".to_string()),
             FieldKind::Key => (!valid_key_binding(value)).then(|| {
                 format!(
-                    "{} must contain one or two supported keys or mouse buttons.",
+                    "{} must contain up to four supported keys or mouse buttons.",
                     field.key
                 )
             }),
@@ -1037,9 +1171,19 @@ fn save_settings(directory: &Path, settings: &Value) -> Result<(), String> {
     for field in FIELDS {
         let value = string_setting(settings, field.id).unwrap_or_default();
         let current_address = address(field.section, field.key);
-        let needs_legacy_migration = field.section == "Controls"
+        let upgrades_previous_upstream_default = field.section == "Keybinds"
+            && existing
+                .get(&current_address)
+                .is_some_and(|value| is_previous_upstream_default(field.key, value))
+            && (migrate_legacy_binding(&existing, field.key).is_some()
+                || existing.get(&current_address).is_some_and(|value| value != field.default));
+        let needs_legacy_migration = ((field.section == "Controls"
             && !existing.contains_key(&current_address)
-            && existing.contains_key(&address("Controller", field.key));
+            && existing.contains_key(&address("Controller", field.key)))
+            || (field.section == "Keybinds"
+                && !existing.contains_key(&current_address)
+                && migrate_legacy_binding(&existing, field.key).is_some()))
+            || upgrades_previous_upstream_default;
         if current_settings.get(field.id).and_then(Value::as_str) != Some(value)
             || needs_legacy_migration
         {
@@ -1598,10 +1742,66 @@ mod tests {
     }
 
     #[test]
-    fn keybinds_accept_two_keys_mouse_buttons_and_wheel() {
+    fn legacy_keyboard_and_mouse_bindings_migrate_into_keybinds() {
+        let directory = temp_directory();
+        fs::write(
+            ini_path(&directory),
+            "[Keyboard]\nButtonA = F\nButtonAAlt = Return\nButtonX = G\nButtonXAlt = H\n\
+             StickUp = W\nDpadUp = 1\nDpadUpAlt = Up\n[Mouse]\nRightButton = A\nLeftButton = X\n\
+             [Keybinds]\nA = Mouse Right\nX = Mouse Left\n",
+        )
+        .expect("write legacy keyboard and mouse settings");
+
+        let settings = read_settings(&directory).expect("migrate legacy bindings");
+        assert_eq!(settings["bindA"], "F, Return, Mouse Right");
+        assert_eq!(settings["bindX"], "G, H, Mouse Left");
+        assert_eq!(settings["bindMoveUp"], "W");
+        assert_eq!(settings["bindDpadUp"], "1, Up");
+        assert!(validate_settings(&settings).is_empty());
+
+        save_settings(&directory, &settings).expect("save migrated bindings");
+        let output = fs::read_to_string(ini_path(&directory)).expect("read migrated bindings");
+        assert!(!output.contains("[Keyboard]"));
+        assert!(!output.contains("RightButton ="));
+        assert!(output.contains("A = F, Return, Mouse Right"));
+        assert!(output.contains("X = G, H, Mouse Left"));
+        assert!(output.contains("MoveUp = W"));
+        assert!(output.contains("DpadUp = 1, Up"));
+        fs::remove_dir_all(directory).expect("clean temp directory");
+    }
+
+    #[test]
+    fn previous_upstream_keybind_defaults_upgrade_to_the_mhw_layout() {
+        let directory = temp_directory();
+        fs::write(
+            ini_path(&directory),
+            "[Keybinds]\nA = Mouse Right\nB = Space\nX = Mouse Left\nY = R, Mouse Middle\n\
+             R = E\nDpadUp = Up\n",
+        )
+        .expect("write previous keybind defaults");
+
+        let settings = read_settings(&directory).expect("upgrade old keybind defaults");
+        assert_eq!(settings["bindA"], "F, Return, Mouse Right");
+        assert_eq!(settings["bindB"], "Space, Backspace");
+        assert_eq!(settings["bindX"], "G, H, Mouse Left");
+        assert_eq!(settings["bindY"], "E, T");
+        assert_eq!(settings["bindR"], "Left Shift, Right Shift");
+        assert_eq!(settings["bindDpadUp"], "1, Up");
+
+        save_settings(&directory, &settings).expect("save upgraded keybind defaults");
+        let output = fs::read_to_string(ini_path(&directory)).expect("read upgraded keybinds");
+        assert!(output.contains("A = F, Return, Mouse Right"));
+        assert!(output.contains("B = Space, Backspace"));
+        assert!(output.contains("X = G, H, Mouse Left"));
+        assert!(output.contains("Y = E, T"));
+        fs::remove_dir_all(directory).expect("clean temp directory");
+    }
+
+    #[test]
+    fn keybinds_accept_four_keys_mouse_buttons_and_wheel() {
         let directory = temp_directory();
         let mut settings = default_settings();
-        settings["bindA"] = json!("J, Mouse 4");
+        settings["bindA"] = json!("J, Mouse 4, K, Mouse Middle");
         settings["bindY"] = json!("K, Mouse Middle");
         settings["bindDpadUp"] = json!("I");
         settings["bindItemLeft"] = json!("Wheel Down");
@@ -1609,12 +1809,12 @@ mod tests {
         save_settings(&directory, &settings).expect("save keybinds");
 
         let output = fs::read_to_string(ini_path(&directory)).expect("read updated ini");
-        assert!(output.contains("[Keybinds]\nA = J, Mouse 4"));
+        assert!(output.contains("[Keybinds]\nA = J, Mouse 4, K, Mouse Middle"));
         assert!(output.contains("Y = K, Mouse Middle"));
         assert!(output.contains("DpadUp = I"));
         assert!(output.contains("ItemLeft = Wheel Down"));
         let loaded = read_settings(&directory).expect("reload settings");
-        assert_eq!(loaded["bindA"], "J, Mouse 4");
+        assert_eq!(loaded["bindA"], "J, Mouse 4, K, Mouse Middle");
         assert_eq!(loaded["bindY"], "K, Mouse Middle");
         assert_eq!(loaded["bindDpadUp"], "I");
         assert_eq!(loaded["bindItemLeft"], "Wheel Down");
@@ -1625,7 +1825,7 @@ mod tests {
         assert!(validate_settings(&settings).is_empty());
         settings["bindDpadUp"] = json!("Escape");
         assert!(validate_settings(&settings).contains_key("bindDpadUp"));
-        settings["bindDpadUp"] = json!("W, A, S");
+        settings["bindDpadUp"] = json!("W, A, S, D, Space");
         assert!(validate_settings(&settings).contains_key("bindDpadUp"));
         settings["bindDpadUp"] = json!("W,\nA");
         assert!(validate_settings(&settings).contains_key("bindDpadUp"));

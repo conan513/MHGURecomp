@@ -91,7 +91,7 @@ struct State {
     float header_bottom = 0;  // (the top part that moves the menu, from the window's top: last frame's)
     bool position_override = false;
     int capture_bind = -1;     // the keybind (BIND_*) a key is being chosen for; -1: the chat key
-    bool capture_add = false;  // the key chosen is that keybind's second, else its only one
+    int capture_slot = 0;      // key slot being assigned; zero replaces the binding
 } s;
 std::atomic<bool> request_exit, request_back, is_dirty, is_confirming, is_capturing, capture_mouse, capture_wheel;
 // (the key pressed while a key is being chosen, or KEY_MOUSE + a mouse button; -1: none yet)
@@ -607,10 +607,10 @@ const char *key_use(int code, int skip) {
         return tr("Chat key");
     return nullptr;
 }
-// Choosing a key: for a keybind (BIND_*, add: its second key) or the chat key (-1)
-void capture(int bind, bool add) {
+// Choosing a key: for a keybind (BIND_*, slot: zero replaces it) or the chat key (-1)
+void capture(int bind, int slot) {
     s.capture_bind = bind;
-    s.capture_add = add;
+    s.capture_slot = slot;
     captured_key = -1;
     push(View::KeyCapture, "capture.cancel");
 }
@@ -626,7 +626,7 @@ void chat_key_row(std::vector<Row> &rows) {
         r.value += std::string(" (") + tr("in use:") + " " + use + ")";
         r.warn = true;
     }
-    r.activate = []() { capture(-1, false); };
+    r.activate = []() { capture(-1, 0); };
     rows.push_back(std::move(r));
 }
 // The Keybinds submenu: a row per keybind (its keys; red where one does something else too), the chat key
@@ -656,16 +656,17 @@ void keybind_rows(std::vector<Row> &r) {
         Row copy = row;
         row.menu = true;
         row.activate = [copy, i]() {
-            bool one = s.draft.binds[i][0] && !s.draft.binds[i][1];
+            int free_slot = 0;
+            while (free_slot < BIND_KEYS && s.draft.binds[i][free_slot]) free_slot++;
             std::vector<std::string> names = {tr("Set key")};
-            if (one)
-                names.push_back(tr("Add a second key"));
+            if (free_slot > 0 && free_slot < BIND_KEYS)
+                names.push_back(tr("Add another key"));
             names.push_back(tr("None"));
-            choices(copy, names, -1, [i, one](int v) {
-                if (v == (one ? 2 : 1))
-                    s.draft.binds[i][0] = s.draft.binds[i][1] = 0;
+            choices(copy, names, -1, [i, free_slot](int v) {
+                if (v == (free_slot > 0 && free_slot < BIND_KEYS ? 2 : 1))
+                    std::fill(s.draft.binds[i], s.draft.binds[i] + BIND_KEYS, 0);
                 else
-                    capture(i, v == 1);
+                    capture(i, v == 1 ? free_slot : 0);
             });
         };
         r.push_back(std::move(row));
@@ -1274,11 +1275,15 @@ std::vector<Row> rows_for_view(bool *open) {
             else if (!*config_key_name(key))
                 s.error = tr("That key can't be used.");
             else {
-                if (!s.capture_add)
-                    keys[0] = key, keys[1] = 0;
-                else if (keys[0] != key)
-                    keys[1] = key;
-                pop();
+                if (s.capture_slot == 0) {
+                    std::fill(keys, keys + BIND_KEYS, 0);
+                    keys[0] = key;
+                    pop();
+                } else if (std::find(keys, keys + BIND_KEYS, key) == keys + BIND_KEYS) {
+                    keys[s.capture_slot] = key;
+                    pop();
+                } else
+                    s.error = tr("That key is already assigned.");
             }
         } else if (key > 0 && *name && strlen(name) < sizeof s.draft.chat_key && !strpbrk(name, ";#")) {
             SDL_strlcpy(s.draft.chat_key, name, sizeof s.draft.chat_key);
@@ -1288,7 +1293,8 @@ std::vector<Row> rows_for_view(bool *open) {
         if (s.view == View::KeyCapture) {
             action(r, "capture.none", tr("None"), []() {
                 if (s.capture_bind >= 0)
-                    s.draft.binds[s.capture_bind][0] = s.draft.binds[s.capture_bind][1] = 0;
+                    std::fill(s.draft.binds[s.capture_bind],
+                              s.draft.binds[s.capture_bind] + BIND_KEYS, 0);
                 else
                     s.draft.chat_key[0] = 0;
                 pop();

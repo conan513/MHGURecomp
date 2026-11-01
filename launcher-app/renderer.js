@@ -200,8 +200,8 @@ const fieldInfo = {
     step: 0.1,
     help: 'In a hunt, mouse movement directly turns the camera; elsewhere it controls the right stick. Click in the game window to capture the mouse.',
   },
-  bindItemLeft: { label: 'Turn item bar left', kind: 'key', help: 'Assign up to two keys, mouse buttons, or the mouse wheel.' },
-  bindItemRight: { label: 'Turn item bar right', kind: 'key', help: 'Assign up to two keys, mouse buttons, or the mouse wheel.' },
+  bindItemLeft: { label: 'Turn item bar left', kind: 'key', help: 'Assign up to four keys, mouse buttons, or the mouse wheel.' },
+  bindItemRight: { label: 'Turn item bar right', kind: 'key', help: 'Assign up to four keys, mouse buttons, or the mouse wheel.' },
   hubServer: {
     label: 'Hub server address',
     kind: 'text',
@@ -225,7 +225,7 @@ for (const [id, label] of [...movementBindings, ...buttonBindings, ...dpadBindin
   fieldInfo[id] = {
     label,
     kind: 'key',
-    help: 'Click, then press up to two keys, mouse buttons, or mouse-wheel directions.',
+    help: 'Click, then press up to four keys, mouse buttons, or mouse-wheel directions.',
   };
 }
 
@@ -320,7 +320,7 @@ function createField(id) {
       } else {
         listeningForBinding = control;
         capturedBindings = [];
-        control.textContent = 'Press up to two inputs…';
+        control.textContent = 'Press up to four inputs…';
       }
     });
   } else if (info.kind === 'select' || info.kind === 'toggle') {
@@ -525,16 +525,16 @@ function acceptBinding(name) {
     capturedBindings = ['None'];
   } else {
     capturedBindings = [...capturedBindings.filter((binding) => binding !== 'None'), name]
-      .slice(0, 2);
+      .slice(0, 4);
   }
   control.dataset.boundKey = capturedBindings.join(', ');
   settings[control.dataset.setting] = control.dataset.boundKey;
-  control.textContent = capturedBindings.length < 2 && capturedBindings[0] !== 'None'
+  control.textContent = capturedBindings.length < 4 && capturedBindings[0] !== 'None'
     ? `${control.dataset.boundKey} — press another or click to finish`
     : control.dataset.boundKey;
   elements['form-error'].hidden = true;
   setDirty(true);
-  if (capturedBindings.length === 2 || capturedBindings[0] === 'None') {
+  if (capturedBindings.length === 4 || capturedBindings[0] === 'None') {
     listeningForBinding = null;
   }
 }

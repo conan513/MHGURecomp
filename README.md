@@ -124,21 +124,27 @@ Keyboard and mouse support (not recommended). The default keys:
 | --- | --- |
 | W A S D | left stick (hold Left Shift to walk) |
 | Mouse | camera |
-| Left click / Right click | X / A |
-| Space / R or middle click | B / Y |
+| Left click / G or H | X |
+| Right click / F or Return | A |
+| Space / Backspace | B |
+| E / T | Y |
+| Q / U | L |
+| Left Shift / Right Shift | R (Left Shift also walks) |
+| Tab / Z | ZL |
+| R / B | ZR |
 | Mouse wheel | item bar: up = the item to the left, down = to the right (in a hunt, no need to hold L) |
-| Q / E | L / R |
-| Tab / T | ZL / ZR |
-| Enter / Backspace | A (confirm) / B (back) |
-| Keypad Enter / Escape | Plus / Plus (alternate) |
+| Keypad Enter | Plus |
+| C / V | Minus |
 | 1 / 2 / 3 / 4 and arrow keys | d-pad up / right / down / left |
-| Ctrl / Alt | left / right stick click |
+| Left Ctrl / Left Alt | left stick click |
+| Left Alt / Right Ctrl | right stick click |
 
 Change them in Settings (F1), Controls, Keybinds: select a button, then Set key and press a key, click a mouse
-button (away from the menu's buttons) or turn the wheel, or Add a second key (each takes up to two). Item left /
+button (away from the menu's buttons) or turn the wheel, or Add another key (each takes up to four). Item left /
 Item right turn the item bar one item per press (by default the wheel; any key works too). The wheel on any other
-button is a short press of it. They are kept in the ini's `[Keybinds]` section (`B = Space`, `Plus = Return, Keypad
-Enter`, `X = Mouse Left`, `ItemLeft = Wheel Up`; key names as the menu shows them, `None` for none). A key that does
+button is a short press of it. They are kept in the ini's `[Keybinds]` section (`B = Space, Backspace`,
+`Plus = Keypad Enter`, `A = F, Return, Mouse Right`, `X = G, H, Mouse Left`, `ItemLeft = Wheel Up`; key names as the menu shows them,
+`None` for none). A key that does
 something else too shows red. Escape, Insert, F1 and F7 to F12 are the recomp's own and can't be used.
 
 Click in the game window to capture the mouse for the camera; Escape lets it go (so does switching to another

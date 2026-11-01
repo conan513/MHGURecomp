@@ -1,11 +1,12 @@
 // Host controls -> the Switch controller the game reads (runtime/hle/input.c).
 //
 // Keyboard and mouse: the keys and mouse buttons of the settings' [Keybinds] (runtime/config.c; by default WASD left
-//   stick, Left Shift held: half tilt, walking; left click = X, right click = A, Space = B, R / middle click = Y, Q = L,
-//   E = R, Tab = ZL, T = ZR, Enter = Plus, Backspace = Minus, arrow keys = d-pad, Ctrl = left stick click, Alt = right
-//   stick click), mouse movement the camera (in a hunt its angles directly, elsewhere the right stick; click in the
-//   window to capture the mouse, Esc releases it), wheel up / down = item bar left / right (ItemLeft / ItemRight: in a
-//   hunt, one item per press or notch without holding L, runtime/hle/itembar.c). While the
+//   stick, Left Shift held: half tilt, walking; F / Return / right click = A, Space / Backspace = B,
+//   G / H / left click = X, E / T = Y, Q / U = L, Left / Right Shift = R, Tab / Z = ZL, R / B = ZR,
+//   Keypad Enter = Plus, C / V = Minus, 1..4 and arrows = d-pad, Ctrl / Alt = stick clicks), mouse movement the
+//   camera (in a hunt its angles directly, elsewhere the right stick; click in the window to capture the mouse,
+//   Esc releases it), wheel up / down = item bar left / right (ItemLeft / ItemRight: in a hunt, one item per press or
+//   notch without holding L, runtime/hle/itembar.c). While the
 //   game shows a text entry (names, chat) the keyboard types instead
 //   (runtime/textinput.c). / ([Controls] ChatKey) opens a line of chat, Enter sends it, also in a quest (runtime/hle/chat.c).
 //   F11 switches windowed <-> full screen, F12 saves a screenshot, Shift+F12 the next 8

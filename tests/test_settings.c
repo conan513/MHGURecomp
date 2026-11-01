@@ -42,7 +42,8 @@ int main(int argc, char **argv) {
     Config initial = g_config;
     Config defaults = config_defaults();
     assert(defaults.ssao == 0 && defaults.controller_rumble == 1);
-    assert(defaults.binds[BIND_X][0] == KEY_MOUSE + SDL_BUTTON_LEFT);
+    assert(defaults.binds[BIND_X][0] == SDL_SCANCODE_G &&
+           defaults.binds[BIND_X][2] == KEY_MOUSE + SDL_BUTTON_LEFT);
     assert(config_parse(config_setting("SSAO"), "On", &defaults) && defaults.ssao);
     assert(config_parse(config_setting("Rumble"), "Off", &defaults) && !defaults.controller_rumble);
     set_env("MHGU_SSAO", "1");
@@ -199,10 +200,12 @@ int main(int argc, char **argv) {
     fsr_saved.fsr=0;assert(config_save(&fsr_saved,error,sizeof error));
     assert(config_live_msaa()==1 && config_live_fxaa()==0); // Remains active until restart.
     g_config=initial;config_load();assert(config_live_msaa()==8 && config_live_fxaa()==1);
-    // [Keybinds]: SDL's key names, the mouse's, Comma for ','; up to two or None; the recomp's own keys refused
+    // [Keybinds]: SDL's key names, the mouse's, Comma for ','; up to four or None; the recomp's own keys refused
     Config keys = config_editable();
-    assert(keys.binds[BIND_X][0] == KEY_MOUSE + SDL_BUTTON_LEFT && keys.binds[BIND_PLUS][1] == SDL_SCANCODE_KP_ENTER);
-    assert(config_live_bind(BIND_MOVE_UP, 0) == SDL_SCANCODE_W && config_live_bind(BIND_A, 0) == KEY_MOUSE + SDL_BUTTON_RIGHT);
+    assert(keys.binds[BIND_X][0] == SDL_SCANCODE_G && keys.binds[BIND_X][2] == KEY_MOUSE + SDL_BUTTON_LEFT);
+    assert(keys.binds[BIND_PLUS][0] == SDL_SCANCODE_KP_ENTER);
+    assert(config_live_bind(BIND_MOVE_UP, 0) == SDL_SCANCODE_W &&
+           config_live_bind(BIND_A, 0) == keys.binds[BIND_A][0]);
     const ConfigSetting *bind_b = config_bind_setting(BIND_B);
     assert(bind_b && !strcmp(bind_b->key, "B") && config_setting("leftstickclick") == config_bind_setting(BIND_LSTICK));
     char value[256];
@@ -213,7 +216,7 @@ int main(int argc, char **argv) {
         Config wheel = keys;
         assert(config_editable().binds[BIND_ITEM_LEFT][0] == KEY_WHEEL_UP && !config_editable().binds[BIND_ITEM_LEFT][1]);
         assert(config_editable().binds[BIND_ITEM_RIGHT][0] == KEY_WHEEL_DOWN);
-        assert(config_editable().binds[BIND_Y][1] == KEY_MOUSE + SDL_BUTTON_MIDDLE);
+        assert(config_editable().binds[BIND_Y][0] == SDL_SCANCODE_E);
         assert(config_setting("itemleft") == config_bind_setting(BIND_ITEM_LEFT));
         assert(config_parse(bind_b, "wheel down, Mouse 4", &wheel) && wheel.binds[BIND_B][0] == KEY_WHEEL_DOWN &&
                wheel.binds[BIND_B][1] == KEY_MOUSE + SDL_BUTTON_X1);
@@ -221,21 +224,70 @@ int main(int argc, char **argv) {
     }
     Config parsed = keys;
     assert(!config_parse(bind_b, "F12", &keys) && !config_parse(bind_b, "Escape", &keys) && !config_parse(bind_b, ",", &keys));
-    assert(!config_parse(bind_b, "A, B, C", &keys) && !config_parse(bind_b, "NoSuchKey", &keys));
+    assert(!config_parse(bind_b, "A, B, C, D, E", &keys) && !config_parse(bind_b, "NoSuchKey", &keys));
     assert(!memcmp(keys.binds, parsed.binds, sizeof keys.binds));  // (a value it doesn't take leaves the keys alone)
-    assert(config_parse(bind_b, "None", &keys) && !keys.binds[BIND_B][0] && !keys.binds[BIND_B][1]);
+    assert(config_parse(bind_b, "A, B, C, D", &keys));
+    config_format(bind_b, &keys, value, sizeof value); assert(!strcmp(value, "A, B, C, D"));
+    assert(config_parse(bind_b, "None", &keys) && !keys.binds[BIND_B][0] && !keys.binds[BIND_B][1] &&
+           !keys.binds[BIND_B][2] && !keys.binds[BIND_B][3]);
     config_format(bind_b, &keys, value, sizeof value); assert(!strcmp(value, "None"));
     keys.binds[BIND_B][0] = SDL_SCANCODE_F;
     assert(config_save(&keys, error, sizeof error) && config_live_bind(BIND_B, 0) == SDL_SCANCODE_F);
     text = read_file(path);
     // (the section added to the file has the platform's line ends)
-    assert((strstr(text, "\nB = F\r\n") || strstr(text, "\nB = F\n")) && strstr(text, "\nPlus = Return, Keypad Enter"));
+    assert((strstr(text, "\nB = F\r\n") || strstr(text, "\nB = F\n")) && strstr(text, "\nPlus = Keypad Enter"));
     free(text);
     bad = keys; bad.binds[BIND_A][1] = SDL_SCANCODE_F1; assert(!config_save(&bad, error, sizeof error));
     bad = keys; bad.binds[BIND_A][1] = KEY_MOUSE + 9; assert(!config_save(&bad, error, sizeof error));
     g_config = initial; config_load();
     assert(config_editable().binds[BIND_B][0] == SDL_SCANCODE_F && !config_editable().binds[BIND_B][1]);
-    assert(config_editable().binds[BIND_RSTICK][1] == SDL_SCANCODE_RALT);
+    assert(config_editable().binds[BIND_RSTICK][1] == SDL_SCANCODE_RCTRL);
+    char legacy_path[1200];
+    snprintf(legacy_path, sizeof legacy_path, "%s.legacy", path);
+    f = fopen(legacy_path, "wb"); assert(f);
+    fputs("[Keyboard]\nButtonA = F\nButtonAAlt = Return\nButtonX = G\nButtonXAlt = H\n"
+          "StickUp = W\nDpadUp = 1\nDpadUpAlt = Up\n"
+          "[Mouse]\nRightButton = A\nLeftButton = X\n", f);
+    fclose(f);
+    set_env("MHGU_CONFIG", legacy_path);
+    g_config = initial; config_load();
+    assert(config_live_bind(BIND_A, 0) == SDL_SCANCODE_F && config_live_bind(BIND_A, 1) == SDL_SCANCODE_RETURN &&
+           config_live_bind(BIND_A, 2) == KEY_MOUSE + SDL_BUTTON_RIGHT);
+    assert(config_live_bind(BIND_X, 0) == SDL_SCANCODE_G && config_live_bind(BIND_X, 1) == SDL_SCANCODE_H &&
+           config_live_bind(BIND_X, 2) == KEY_MOUSE + SDL_BUTTON_LEFT);
+    assert(config_live_bind(BIND_MOVE_UP, 0) == SDL_SCANCODE_W);
+    assert(config_live_bind(BIND_DPAD_UP, 0) == SDL_SCANCODE_1 &&
+           config_live_bind(BIND_DPAD_UP, 1) == SDL_SCANCODE_UP);
+    g_config = initial; config_load();  // appended defaults must not override legacy values next launch
+    assert(config_live_bind(BIND_A, 0) == SDL_SCANCODE_F &&
+           config_live_bind(BIND_A, 2) == KEY_MOUSE + SDL_BUTTON_RIGHT);
+    text = read_file(legacy_path);
+    assert(!strstr(text, "[Keybinds]"));
+    free(text);
+    f = fopen(legacy_path, "ab"); assert(f);
+    fputs("\n[Keybinds]\nA = Mouse Right\nX = Mouse Left\n", f);
+    fclose(f);
+    g_config = initial; config_load();  // old generated defaults do not replace the MHW-style layout
+    assert(config_live_bind(BIND_A, 0) == SDL_SCANCODE_F &&
+           config_live_bind(BIND_A, 2) == KEY_MOUSE + SDL_BUTTON_RIGHT);
+    text = read_file(legacy_path);
+    assert(strstr(text, "[Keybinds]") && !strstr(text, "MoveUp = W"));
+    free(text);
+    f = fopen(legacy_path, "wb"); assert(f);
+    fputs("[Keybinds]\nA = Mouse Right\nB = Space\nX = Mouse Left\nY = R, Mouse Middle\n"
+          "R = E\nDpadUp = Up\n", f);
+    fclose(f);
+    g_config = initial; config_load();  // old generated defaults upgrade when legacy sections are already gone
+    assert(config_live_bind(BIND_A, 0) == SDL_SCANCODE_F &&
+           config_live_bind(BIND_A, 2) == KEY_MOUSE + SDL_BUTTON_RIGHT);
+    assert(config_live_bind(BIND_B, 0) == SDL_SCANCODE_SPACE &&
+           config_live_bind(BIND_B, 1) == SDL_SCANCODE_BACKSPACE);
+    assert(config_live_bind(BIND_X, 0) == SDL_SCANCODE_G &&
+           config_live_bind(BIND_X, 2) == KEY_MOUSE + SDL_BUTTON_LEFT);
+    assert(config_live_bind(BIND_Y, 0) == SDL_SCANCODE_E &&
+           config_live_bind(BIND_Y, 1) == SDL_SCANCODE_T);
+    set_env("MHGU_CONFIG", path);
+    remove(legacy_path);
     remove(path);
     puts("PASS: INI round trip, Auto/Desktop, environment overrides, comments/unknown keys, duplicate aliases, quest removal, invalid input, atomic write failure, live volume and English/Spanish, icons, hot settings, keybinds and restart classification.");
     return 0;
