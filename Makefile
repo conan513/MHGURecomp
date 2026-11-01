@@ -2,8 +2,8 @@
 # Windows: MSYS2 UCRT64 (clang, lld, make; see README.md). Linux: clang (planned).
 #
 #   make gen GAME=<folder with exefs/ and romfs/>   recompile the game code from your own dump into generated/
-#   make -j4                                        build the runtime and package it in F:/mhgu-build-tools/build on Windows
-# build/ holds only the game folder (what a player copies); the compiler's files go to obj/.
+#   make -j4                                        build the runtime, launcher, and package it in build/ on Windows
+# build/ holds the game folder and launcher (what a player copies); the compiler's files go to obj/.
 UNAME := $(shell uname -s)
 ifneq ($(filter MINGW% MSYS% CYGWIN% Windows_NT,$(UNAME) $(OS)),)
 PLATFORM := windows
@@ -109,6 +109,7 @@ EXE      := $(B)/mhgurecomp.exe
 LAUNCHER := $(B)/MHGU-Launcher.exe
 NPM      ?= npm
 CARGO    ?= cargo
+LAUNCHER_PREBUILT ?= 0
 PACKAGE_DIR ?= /f/mhgu-build-tools/build
 OSFLAGS  := -D_FILE_OFFSET_BITS=64 -DWIN32_LEAN_AND_MEAN -DNOMINMAX -D_CRT_RAND_S -D_POSIX_THREAD_SAFE_FUNCTIONS
 GENFLAGS += -D_FILE_OFFSET_BITS=64
@@ -214,7 +215,7 @@ else
 RT_CXX   := $(O)/rt/nvn/vulkan/vma.o $(FSR_OBJ)
 endif
 
-all: $(EXE) $(if $(GEN_SRC),$(GAMELIB)) $(UPDATER) $(if $(filter windows,$(PLATFORM)),bundle) data licenses pipelist
+all: $(EXE) $(if $(GEN_SRC),$(GAMELIB)) $(UPDATER) $(if $(filter windows,$(PLATFORM)),bundle launcher) data licenses pipelist
 
 # Host-only INI/settings regression test: no game dump or generated code required.
 .PHONY: test-settings
@@ -415,7 +416,6 @@ $(GAMELIB): $(GEN_OBJ) | $(EXE)
 	@mkdir -p $(O)
 	$(CC) $(GAMELIB_LDFLAGS) -o $(O)/gamelib.tmp $^
 	mv -f $(O)/gamelib.tmp $@
-endif
 
 PY := $(firstword $(wildcard tools/venv/Scripts/python.exe) $(wildcard tools/venv/bin/python) python3)
 PY_TOOL := $(if $(filter tools/venv/%,$(PY)),../$(PY),$(PY))
@@ -434,11 +434,34 @@ bundle: $(EXE) $(if $(GEN_SRC),$(GAMELIB)) $(UPDATER)
 	    --licenses $(B)/licenses --with $(LICENSE_PKGS)
 
 ifneq ($(LAUNCHER),)
-package: bundle data licenses
+package: bundle data licenses launcher
 	@mkdir -p "$(PACKAGE_DIR)"
 	@cp -a "$(B)/." "$(PACKAGE_DIR)/"
 	@mkdir -p "$(PACKAGE_DIR)/data"
 	@cp README.md LICENSE THIRD_PARTY_NOTICES "$(PACKAGE_DIR)/"
+endif
+
+ifeq ($(PLATFORM),windows)
+LAUNCHER_INPUTS := package.json package-lock.json scripts/build-launcher-icon.mjs backgrounds/launcher-icon.png \
+                   $(wildcard backgrounds/*.webp) \
+                   src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/build.rs src-tauri/tauri.conf.json \
+                   $(wildcard launcher-app/*.cjs launcher-app/*.html launcher-app/*.js launcher-app/*.css \
+                     launcher-app/*.mjs launcher-app/test/*.cjs src-tauri/src/*.rs src-tauri/capabilities/*.json)
+
+.PHONY: launcher
+ifeq ($(LAUNCHER_PREBUILT),1)
+launcher:
+	@test -f "$(LAUNCHER)" || { echo "launcher: expected prebuilt $(LAUNCHER)"; exit 1; }
+else
+launcher: $(LAUNCHER)
+
+$(LAUNCHER): $(LAUNCHER_INPUTS)
+	$(NPM) ci
+	$(NPM) run build:launcher
+	$(CARGO) build --manifest-path src-tauri/Cargo.toml --release
+	@mkdir -p "$(dir $@)"
+	cp src-tauri/target/release/mhgu-launcher.exe "$@"
+endif
 endif
 
 data: $(B)/data/.complete
@@ -479,7 +502,7 @@ dist: all
 	  { echo "dist: '$(VERSION)' is not a release version: make dist VERSION=<the release's tag, e.g. 0.10.4>"; exit 1; }
 	$(PY) tools/dist.py $(B) $(DIST) $(PLATFORM) $(VERSION) $(if $(BONUS),--bonus "$(BONUS)")
 
-.PHONY: all gen test-lift runtime-objs clean bundle data licenses pipelist dist FORCE
+.PHONY: all gen test-lift runtime-objs clean bundle data licenses pipelist dist package FORCE
 
 # Exercise real ImGui navigation without a game dump or graphics device.
 .PHONY: test-settings-panel

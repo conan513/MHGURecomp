@@ -64,7 +64,7 @@ jobs:
       - name: Build runtime (without game code)
         shell: msys2 {0}
         run: |
-          make -j2 build/mhgurecomp.exe bundle LAUNCHER_PREBUILT=1 SKIP_GAMELIB=1
+          make -j2 build/mhgurecomp.exe bundle launcher LAUNCHER_PREBUILT=1 SKIP_GAMELIB=1
 
       - name: Upload runtime artifact
         uses: actions/upload-artifact@v4

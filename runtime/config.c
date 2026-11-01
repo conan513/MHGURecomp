@@ -15,7 +15,6 @@
 #include <SDL3/SDL.h>
 
 #include "config.h"
-#include "hle/input.h"
 #include "rt.h"
 
 #include "keymap.h"
@@ -26,9 +25,21 @@
     {SDL_SCANCODE_Q}, {SDL_SCANCODE_E}, {SDL_SCANCODE_TAB}, {SDL_SCANCODE_T}, {SDL_SCANCODE_RETURN, SDL_SCANCODE_KP_ENTER}, \
     {SDL_SCANCODE_BACKSPACE}, {SDL_SCANCODE_UP}, {SDL_SCANCODE_DOWN}, {SDL_SCANCODE_LEFT}, {SDL_SCANCODE_RIGHT},          \
     {SDL_SCANCODE_LCTRL, SDL_SCANCODE_RCTRL}, {SDL_SCANCODE_LALT, SDL_SCANCODE_RALT}, {KEY_WHEEL_UP}, {KEY_WHEEL_DOWN}}
-#define CONFIG_DEFAULT_VALUES DISPLAY_BORDERLESS, 1920, 1080, 0, 0, 60, 1, 1, 1, FACE_POSITION, 39500, "", 0, 1, 1, {{1, 1, 1, 1}, 2}, 1.0f, 0.0f, 1.0f, UI_CENTER, 1, 100, 0, 0, 100, MENU_CONFIRM_ORIGINAL, 1, 0, FSR_NATIVE, 0.8f, 1, 0.9f, 1, FSR_UP_3, UPDATES_ASK, 1, 1.0f, 0, COMBO_LENIENT, "", "", "/", FXAA_ORIGINAL, 0, DEFAULT_BINDS, THEME_HUNTER, 1, 1
-Config g_config = {CONFIG_DEFAULT_VALUES};
-Config config_defaults(void) { Config c = {CONFIG_DEFAULT_VALUES}; return c; }
+#define CONFIG_DEFAULT_VALUES                                                                                           \
+    {                                                                                                                   \
+        .display_mode = DISPLAY_BORDERLESS, .width = 1920, .height = 1080, .fps = 60, .vsync = 1, .msaa = 1, .fxaa = 1, \
+        .ssao = 0, .face_buttons = FACE_POSITION, .controller_rumble = 1, .ldn_port = 39500, .sync_small_monsters = 0,  \
+        .bonus_content = 1, .village_in_hub = 1, .hp = {.scale = {1, 1, 1, 1}, .village = 2}, .mouse_sensitivity = 1.0f, \
+        .aspect_ratio = 0.0f, .fov = 1.0f, .ui_anchor = UI_CENTER, .background_input = 1, .volume = 100,                \
+        .button_icons = 0, .language = 0, .menu_scale = 100, .menu_confirm = MENU_CONFIRM_ORIGINAL, .confirm_exit = 0,  \
+        .fsr = 0, .fsr_quality = FSR_NATIVE, .fsr_sharpness = 0.8f, .fsr_objmotion = 1, .fsr_reactive = 0.9f,          \
+        .fsr_animsurf = 1, .fsr_upscaler = FSR_UP_3, .updates = UPDATES_ASK, .shader_prewarm = 1,                        \
+        .draw_distance = 1.0f, .mute_in_background = 0, .combo_window = COMBO_LENIENT, .chat_key = "/",                   \
+        .fxaa_mode = FXAA_ORIGINAL, .smooth_gradients = 0, .binds = DEFAULT_BINDS, .menu_theme = THEME_HUNTER,          \
+        .discord = 1, .discord_hunter = 1,                                                                              \
+    }
+Config g_config = CONFIG_DEFAULT_VALUES;
+Config config_defaults(void) { return (Config)CONFIG_DEFAULT_VALUES; }
 uint32_t g_render_size[2] = {1920, 1080};
 float g_render_aspect = 16.0f / 9.0f;
 float g_fov_scale = 1.0f;
@@ -169,19 +180,9 @@ static const char DEFAULT_INI[] =
     "ChatKey = /\n"
     "\n"
     "[Mouse]\n"
-    "; Reverse the mouse-look axes\n"
-    "InvertHorizontal = Off\n"
-    "InvertVertical = Off\n"
-    "; 0.05 is smooth with slower response; 1 is immediate\n"
-    "Smoothing = 0.5\n"
     "; Mouse sensitivity\n"
     "; Default: 1.0\n"
     "MouseSensitivity = 1.0\n"
-    "LeftButton = X\n"
-    "MiddleButton = None\n"
-    "RightButton = A\n"
-    "X1Button = None\n"
-    "X2Button = None\n"
     "\n"
     "[Keybinds]\n"
     "; The keys or mouse buttons for each Switch button, for moving (the left stick) and for turning the item bar\n"
@@ -781,77 +782,12 @@ bool config_help(const char *key, char *buf, size_t size) {
 static int desktop_w, desktop_h;
 static bool render_auto = true;
 
-static const struct {
-    const char *key;
-    int binding;
-} keyboard_settings[] = {
-    {"dpadup", KEY_DPAD_UP}, {"dpadupalt", KEY_DPAD_UP_ALT},
-    {"dpadright", KEY_DPAD_RIGHT}, {"dpadrightalt", KEY_DPAD_RIGHT_ALT},
-    {"dpaddown", KEY_DPAD_DOWN}, {"dpaddownalt", KEY_DPAD_DOWN_ALT},
-    {"dpadleft", KEY_DPAD_LEFT}, {"dpadleftalt", KEY_DPAD_LEFT_ALT},
-    {"buttonb", KEY_BUTTON_B}, {"buttonbalt", KEY_BUTTON_B_ALT}, {"buttonx", KEY_BUTTON_X},
-    {"buttonxalt", KEY_BUTTON_X_ALT}, {"buttony", KEY_BUTTON_Y}, {"buttonyalt", KEY_BUTTON_Y_ALT},
-    {"buttonl", KEY_BUTTON_L}, {"buttonlalt", KEY_BUTTON_L_ALT},
-    {"buttonr", KEY_BUTTON_R}, {"buttonralt", KEY_BUTTON_R_ALT},
-    {"buttonzl", KEY_BUTTON_ZL}, {"buttonzlalt", KEY_BUTTON_ZL_ALT},
-    {"buttonzr", KEY_BUTTON_ZR}, {"buttonzralt", KEY_BUTTON_ZR_ALT},
-    {"buttonplus", KEY_BUTTON_PLUS}, {"buttonplusalt", KEY_BUTTON_PLUS_ALT},
-    {"buttonplusalt2", KEY_BUTTON_PLUS_ALT2}, {"buttonminus", KEY_BUTTON_MINUS},
-    {"buttonminusalt", KEY_BUTTON_MINUS_ALT}, {"buttonleftstick", KEY_BUTTON_LSTICK},
-    {"buttonleftstickalt", KEY_BUTTON_LSTICK_ALT},
-    {"buttona", KEY_BUTTON_A}, {"buttonaalt", KEY_BUTTON_A_ALT}, {"buttonrightstick", KEY_BUTTON_RSTICK},
-    {"buttonrightstickalt", KEY_BUTTON_RSTICK_ALT},
-    {"stickup", KEY_STICK_UP}, {"stickleft", KEY_STICK_LEFT},
-    {"stickdown", KEY_STICK_DOWN}, {"stickright", KEY_STICK_RIGHT},
-};
-
-static const struct {
-    const char *key;
-    int binding;
-} mouse_settings[] = {
-    {"leftbutton", MOUSE_LEFT}, {"middlebutton", MOUSE_MIDDLE}, {"rightbutton", MOUSE_RIGHT},
-    {"x1button", MOUSE_X1}, {"x2button", MOUSE_X2},
-};
-
-static const struct {
-    const char *name;
-    int button;
-} mouse_button_names[] = {
-    {"a", BTN_A}, {"b", BTN_B}, {"x", BTN_X}, {"y", BTN_Y},
-    {"lstick", BTN_LSTICK}, {"rstick", BTN_RSTICK}, {"l", BTN_L}, {"r", BTN_R},
-    {"zl", BTN_ZL}, {"zr", BTN_ZR}, {"plus", BTN_PLUS}, {"minus", BTN_MINUS},
-    {"dpadleft", BTN_LEFT}, {"dpadup", BTN_UP}, {"dpadright", BTN_RIGHT}, {"dpaddown", BTN_DOWN},
-};
-
-static int parse_mouse_button(const char *name) {
-    if (!strcmp(name, "none")) return -1;
-    for (unsigned i = 0; i < sizeof mouse_button_names / sizeof *mouse_button_names; i++)
-        if (!strcmp(name, mouse_button_names[i].name)) return mouse_button_names[i].button;
-    return -2;
-}
-
 static void set_key(const char *key, char *val, int line) {
     char k[64], v[256];
     snprintf(k, sizeof k, "%s", key);
     snprintf(v, sizeof v, "%s", val);
     squash(k);
     squash(v);
-    for (unsigned i = 0; i < sizeof keyboard_settings / sizeof *keyboard_settings; i++) {
-        if (strcmp(k, keyboard_settings[i].key)) continue;
-        SDL_Scancode scancode = !strcmp(v, "none") ? SDL_SCANCODE_UNKNOWN : SDL_GetScancodeFromName(val);
-        if ((!strcmp(v, "none") || scancode != SDL_SCANCODE_UNKNOWN) && scancode < SDL_SCANCODE_COUNT)
-            g_config.keyboard[keyboard_settings[i].binding] = scancode;
-        else
-            LOG("[config] line %d: \"%s\" is not a recognized keyboard key; using the default\n", line, val);
-        return;
-    }
-    for (unsigned i = 0; i < sizeof mouse_settings / sizeof *mouse_settings; i++) {
-        if (strcmp(k, mouse_settings[i].key)) continue;
-        int button = parse_mouse_button(v);
-        if (button != -2) g_config.mouse_buttons[mouse_settings[i].binding] = button;
-        else LOG("[config] line %d: \"%s\" is not a recognized mouse button mapping; using the default\n", line, val);
-        return;
-    }
     if (!strncmp(k, "quest", 5) && isdigit((unsigned char)k[5])) {  // [Monster HP] Quest<number> = factors
         HpScale *h = &g_config.hp;
         char *end;
@@ -912,20 +848,6 @@ static void append_missing_sections(const char *path, const char *seen) {
     if (o) fclose(o);
 }
 
-static void migrate_default_keyboard_bindings(void) {
-    int *key = g_config.keyboard;
-    if (key[KEY_BUTTON_B] == SDL_SCANCODE_SPACE && key[KEY_BUTTON_A] == SDL_SCANCODE_F &&
-        key[KEY_BUTTON_B_ALT] == SDL_SCANCODE_RETURN && key[KEY_BUTTON_A_ALT] == SDL_SCANCODE_BACKSPACE &&
-        key[KEY_BUTTON_PLUS] == SDL_SCANCODE_RETURN && key[KEY_BUTTON_PLUS_ALT] == SDL_SCANCODE_KP_ENTER &&
-        key[KEY_BUTTON_PLUS_ALT2] == SDL_SCANCODE_ESCAPE) {
-        key[KEY_BUTTON_B_ALT] = SDL_SCANCODE_BACKSPACE;
-        key[KEY_BUTTON_A_ALT] = SDL_SCANCODE_RETURN;
-        key[KEY_BUTTON_PLUS] = SDL_SCANCODE_KP_ENTER;
-        key[KEY_BUTTON_PLUS_ALT] = SDL_SCANCODE_ESCAPE;
-        key[KEY_BUTTON_PLUS_ALT2] = SDL_SCANCODE_UNKNOWN;
-    }
-}
-
 void config_load(void) {
     char path[1100];
     config_path(path, sizeof path);
@@ -958,8 +880,6 @@ void config_load(void) {
         fclose(f);
         append_missing_sections(path, seen);
     }
-    migrate_default_keyboard_bindings();
-
     // Keep Auto/Desktop and file values, rather than persisting temporary environment overrides.
     render_auto = !g_config.render_w;
     config_store_loaded(&g_config);

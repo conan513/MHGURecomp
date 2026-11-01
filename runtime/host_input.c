@@ -18,13 +18,13 @@
 // Scripted input (tests): MHGU_INPUT="frame:BUTTON:frames,..." holds BUTTON from that presented frame for that many
 //   frames. BUTTON: A B X Y L R ZL ZR PLUS MINUS LEFT UP RIGHT DOWN LSTICK RSTICK, or STICK_UP/DOWN/LEFT/RIGHT and
 //   RSTICK_UP/DOWN/LEFT/RIGHT (full tilt).
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
 #include <SDL3/SDL.h>
 
-#include "camera_jitter.h"
 #include "config.h"
 #include "menu_confirm.h"
 #include "forge.h"
@@ -97,15 +97,6 @@ static float mouse_dx, mouse_dy;  // counts moved since the last update
 // (tests: the control file's "mousemove <x> <y> <ms>", a mouse moving at that many counts a second, captured or not)
 static float test_vx, test_vy;
 static uint64_t test_until;
-
-static uint64_t mouse_button_state(void) {
-    uint64_t buttons = 0;
-    for (int i = 0; i < MOUSE_BUTTON_COUNT; i++) {
-        int binding = g_config.mouse_buttons[i];
-        if (mouse_down[i] && binding >= 0 && binding < 64) buttons |= B(binding);
-    }
-    return buttons;
-}
 
 // ---- scripted input
 typedef struct { uint64_t start, len; uint64_t buttons; int stick, x, y; } ScriptStep;
@@ -668,6 +659,7 @@ static void mouse_update(int *rx, int *ry) {
         else if (SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) SDL_HideCursor();
     }
     static uint64_t last;
+    static float vx, vy;  // the speed, smoothed: counts a second
     uint64_t now = plat_now_ns();
     float dt = last ? (float)(now - last) * 1e-9f : 0.0f;
     last = now;
@@ -683,13 +675,13 @@ static void mouse_update(int *rx, int *ry) {
         vx += (mouse_dx / dt - vx) * a, vy += (mouse_dy / dt - vy) * a;
     }
     mouse_dx = mouse_dy = 0;
-}
-
-void host_input_take_mouse_delta(float *dx, float *dy) {
-    pthread_mutex_lock(&mouse_look_lock);
-    *dx = mouse_look_dx, *dy = mouse_look_dy;
-    mouse_look_dx = mouse_look_dy = 0;
-    pthread_mutex_unlock(&mouse_look_lock);
+    if (!mouse_captured && now >= test_until) vx = vy = 0;
+    float s = config_live_mouse_sensitivity() / MOUSE_FULL_SPEED;
+    float x = vx * s, y = -vy * s;  // (the mouse's y is down, the stick's up)
+    float m = sqrtf(x * x + y * y);
+    if (m < 0.02f) return;
+    float t = (MOUSE_DEADZONE + (1.0f - MOUSE_DEADZONE) * (m > 1.0f ? 1.0f : m)) / m;
+    *rx += (int)(x * t * 32767.0f), *ry += (int)(y * t * 32767.0f);
 }
 
 // The game's rumble (input_rumble) to the controller: on a change, at most every 16 ms (the game sends a value every

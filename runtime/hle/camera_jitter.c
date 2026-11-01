@@ -49,13 +49,6 @@
 #define CAM_FAR       0x30u
 #define CAM_NEAR      0x34u
 #define CAM_ASPECT    0x38u
-#define CAM_EYE       0x40u
-#define CAM_UP        0x50u
-#define CAM_TARGET    0x60u
-#define G_SQUEST      0x1a8ad90u
-#define G_SPLAYER     0x1a85b58u
-#define G_MEMBER      0x1a8ca48u
-#define PLAYER_AREA   0x1054u
 #define RING          64u
 
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -68,13 +61,6 @@ static uint32_t g_rw = 1920, g_rh = 1080, g_phases = 8;
 static bool g_test;                 // MHGU_JITTER_TEST
 static float g_test_xy[2];
 static bool g_log;
-
-static uint64_t g_mouse_present = UINT64_MAX;
-static float g_mouse_yaw, g_mouse_pitch;
-static float g_mouse_yaw_target, g_mouse_pitch_target;
-
-#define MOUSE_RAD_PER_COUNT (0.06f * 0.017453292519943295f)
-#define CAMERA_GROUND_CLEARANCE 80.0f
 
 static bool main_aspect(float a) {
     return fabsf(a - 16.0f / 9.0f) < 0.01f || fabsf(a - g_render_aspect) < 0.01f;
@@ -149,43 +135,14 @@ static void lookat_at(Cpu *c, uint32_t fn) {
     fnhook_call_original(c, fn);
     if (!readable(out, 64) || !readable(cam, 0x70) || !main_aspect(LDF(cam + CAM_ASPECT))) return;
     pthread_mutex_lock(&g_lock);
-
-    if (is_main) {
-
-        // Consume mouse delta exactly once per presented frame
-        if (g_mouse_present != g_present_count) {
-            float dx = 0.0f, dy = 0.0f;
-            g_mouse_present = g_present_count;
-            host_input_take_mouse_delta(&dx, &dy);
-            float invert_x = g_config.camera_invert_horizontal ? -1.0f : 1.0f;
-            float invert_y = g_config.camera_invert_vertical ? -1.0f : 1.0f;
-            g_mouse_yaw_target += dx * g_config.mouse_sensitivity * invert_x * MOUSE_RAD_PER_COUNT;
-            g_mouse_pitch_target += dy * g_config.mouse_sensitivity * invert_y * MOUSE_RAD_PER_COUNT;
-            if (g_mouse_pitch_target > 1.3f) g_mouse_pitch_target = 1.3f;
-            if (g_mouse_pitch_target < -1.3f) g_mouse_pitch_target = -1.3f;
-            g_mouse_yaw += remainderf(g_mouse_yaw_target - g_mouse_yaw, 6.28318531f) * g_config.camera_smoothing;
-            g_mouse_pitch += (g_mouse_pitch_target - g_mouse_pitch) * g_config.camera_smoothing;
-            if (g_mouse_pitch > 1.3f) g_mouse_pitch = 1.3f;
-            if (g_mouse_pitch < -1.3f) g_mouse_pitch = -1.3f;
-            g_mouse_yaw = remainderf(g_mouse_yaw, 6.28318531f);
-        }
-
-        mouse_camera_apply(cam);
-    }
-
-    fnhook_call_original(c, FN_LOOKAT);
-
-    float view[16];
-    memcpy(view, G2H(out), 64);
-    memcpy(G2H(out), view, 64);
     int i = 0;
     while (i < g_nviews && g_views[i].cam != cam) i++;
     if (i == g_nviews) {
         if (g_nviews < 8) g_nviews++;
-        else i = 7;
+        else i = 7;  // (more cameras than that: the last slot is reused)
     }
     g_views[i].cam = cam;
-    memcpy(g_views[i].m, view, 64);
+    memcpy(g_views[i].m, G2H(out), 64);
     pthread_mutex_unlock(&g_lock);
 }
 
@@ -197,7 +154,6 @@ static void projection_at(Cpu *c, uint32_t fn) {
     float m[16];
     memcpy(m, G2H(out), 64);
     pthread_mutex_lock(&g_lock);
-
     int v = 0;
     while (v < g_nviews && g_views[v].cam != cam) v++;
     if (v == g_nviews) { pthread_mutex_unlock(&g_lock); return; }  // (no view of this camera yet)
@@ -219,8 +175,7 @@ static void projection_at(Cpu *c, uint32_t fn) {
     r->gpu9 = m[9] + 2.0f * jy / (float)g_rh;
     float g8 = r->gpu8, g9 = r->gpu9;
     pthread_mutex_unlock(&g_lock);
-
-    if (jx != 0 || jy != 0) {
+    if (jx != 0 || jy != 0) {  // into the GPU's copy of the projection only (see the top)
         STF(out + 0x20, g8);
         STF(out + 0x24, g9);
     }

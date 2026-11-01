@@ -407,20 +407,6 @@ HLE_FUNC("ImFont_CalcTextSizeA", ig_ImFont_CalcTextSizeA) {
     c->r[0] = ret;
 }
 
-HLE_FUNC("ImFontAtlas_GetGlyphRangesDefault", ig_ImFontAtlas_GetGlyphRangesDefault) {
-    static uint32_t guest_ranges;
-    if (!guest_ranges) {
-        guest_ranges = hle_alloc(sizeof forge_font_glyph_ranges);
-        if (!guest_ranges) {
-            LOG("[forge] could not allocate guest ImGui glyph ranges\n");
-            c->r[0] = 0;
-            return;
-        }
-        memcpy(G2H(guest_ranges), forge_font_glyph_ranges, sizeof forge_font_glyph_ranges);
-    }
-    c->r[0] = guest_ranges;
-}
-
 static uint32_t ff14_name_font;
 
 HLE_FUNC("ImFontAtlas_AddFontFromFileTTF", ig_ImFontAtlas_AddFontFromFileTTF) {

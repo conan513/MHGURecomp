@@ -934,10 +934,10 @@ key on ItemLeft / ItemRight, the wheel on a button keybind.
    (the Palico Scout's "Rotate" prompt). MHGU_CONTROL `hudtrace` logs a frame's HUD quads and their anchors. Left: the HUD's layout elsewhere (title, town, quest board, item box) unverified; at Edges
    the Hunter Arts prompt goes right with its layer; whether an off-screen 3D view (equipment box preview, guild
    card) uses one of the three cameras (they are left alone unless 16:9).
-10. Keyboard remapping: an ini [Keyboard] section, one line per Switch button (`A = Mouse2`, `B = Space`; SDL key
-   names, several keys per button, mouse buttons too), plus the left stick's four directions and the walk key. Today
-   the layout is fixed: key_buttons in runtime/host_input.c, WASD / Shift handled beside it. The current layout stays
-   the default, so existing ini files keep working; the settings launcher (item 7) can show it later.
+10. Keyboard and mouse remapping: the runtime now reads the `[Keybinds]` section, with up to two keys, mouse buttons,
+   or wheel directions for each Switch control, movement direction, stick click, and item-bar direction. The launcher
+   exposes these bindings and removes obsolete `[Keyboard]` and mouse-button / camera-smoothing entries when settings
+   are saved; unrelated unknown INI settings are preserved.
 11. Button-combo windows at high frame rates: fixed (2026-10-28), see "Two-button inputs and the frame rate" above.
    Hunter Arts on R+A+B (another control type, 2026-10-29): tested by the user at a high frame rate, works (R and A
    held then B, or all three at once). The countdown starts on A, B, X, Y and R / ZR (pad bits A 0x100, B 0x80,
@@ -971,9 +971,10 @@ MSYS2 UCRT64 on PATH (`C:\msys64\ucrt64\bin;C:\msys64\usr\bin`):
 
     make gen GAME=../mhgu/game     # recompile (needs tools/venv: capstone, unicorn, lz4)
     make -j4                       # ~8 min full, incremental (changed chunks only) is fast
+    build/MHGU-Launcher.exe        # settings and launch, built with Node.js 22+ and stable Rust
     build/mhgurecomp.exe           # or double-click it; run-game.bat / run-debug.bat start it too
 
-`make` also makes build/ the game folder: the MSYS2 DLLs the executable needs beside it (tools/bundle_dlls.py
+`make` also builds the Windows launcher and makes build/ the game folder: the MSYS2 DLLs the executable needs beside it (tools/bundle_dlls.py
 follows the import tables; ~100 DLLs, most of them FFmpeg's; never vulkan-1.dll: the driver's loader must be used)
 and the game files in build/data/exefs + build/data/romfs (target `data`, once: hard links to GAME's files, so no
 second copy on disk; plain copies where hard links don't work). Started without a game folder argument, the

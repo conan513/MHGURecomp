@@ -32,26 +32,6 @@ enum FieldKind {
     Text,
 }
 
-const MOUSE_BUTTON_OPTIONS: &[&str] = &[
-    "None",
-    "A",
-    "B",
-    "X",
-    "Y",
-    "L Stick",
-    "R Stick",
-    "L",
-    "R",
-    "ZL",
-    "ZR",
-    "Plus",
-    "Minus",
-    "D-pad Left",
-    "D-pad Up",
-    "D-pad Right",
-    "D-pad Down",
-];
-
 const FIELDS: &[Field] = &[
     Field {
         section: "Display",
@@ -200,21 +180,21 @@ const FIELDS: &[Field] = &[
         kind: FieldKind::Toggle,
     },
     Field {
-        section: "Controller",
+        section: "Controls",
         key: "FaceButtons",
         id: "faceButtons",
         default: "Position",
         kind: FieldKind::Select(&["Position", "Label"]),
     },
     Field {
-        section: "Controller",
+        section: "Controls",
         key: "BackgroundInput",
         id: "backgroundInput",
         default: "On",
         kind: FieldKind::Toggle,
     },
     Field {
-        section: "Controller",
+        section: "Controls",
         key: "Rumble",
         id: "rumble",
         default: "On",
@@ -235,262 +215,164 @@ const FIELDS: &[Field] = &[
         kind: FieldKind::Toggle,
     },
     Field {
-        section: "Keyboard",
-        key: "DpadUp",
-        id: "keyDpadUp",
-        default: "1",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "DpadUpAlt",
-        id: "keyDpadUpAlt",
-        default: "Up",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "DpadRight",
-        id: "keyDpadRight",
-        default: "2",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "DpadRightAlt",
-        id: "keyDpadRightAlt",
-        default: "Right",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "DpadDown",
-        id: "keyDpadDown",
-        default: "3",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "DpadDownAlt",
-        id: "keyDpadDownAlt",
-        default: "Down",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "DpadLeft",
-        id: "keyDpadLeft",
-        default: "4",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "DpadLeftAlt",
-        id: "keyDpadLeftAlt",
-        default: "Left",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonB",
-        id: "keyButtonB",
-        default: "Space",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonBAlt",
-        id: "keyButtonBAlt",
-        default: "Backspace",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonX",
-        id: "keyButtonX",
-        default: "G",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonXAlt",
-        id: "keyButtonXAlt",
-        default: "H",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonY",
-        id: "keyButtonY",
-        default: "E",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonYAlt",
-        id: "keyButtonYAlt",
-        default: "T",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonL",
-        id: "keyButtonL",
-        default: "Q",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonLAlt",
-        id: "keyButtonLAlt",
-        default: "U",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonR",
-        id: "keyButtonR",
-        default: "Left Shift",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonRAlt",
-        id: "keyButtonRAlt",
-        default: "Right Shift",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonZL",
-        id: "keyButtonZl",
-        default: "Tab",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonZLAlt",
-        id: "keyButtonZlAlt",
-        default: "Z",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonZR",
-        id: "keyButtonZr",
-        default: "R",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonZRAlt",
-        id: "keyButtonZrAlt",
-        default: "B",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonPlus",
-        id: "keyButtonPlus",
-        default: "Keypad Enter",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonPlusAlt",
-        id: "keyButtonPlusAlt",
-        default: "Escape",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonPlusAlt2",
-        id: "keyButtonPlusAlt2",
-        default: "None",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonMinus",
-        id: "keyButtonMinus",
-        default: "C",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonMinusAlt",
-        id: "keyButtonMinusAlt",
-        default: "V",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonLeftStick",
-        id: "keyButtonLeftStick",
-        default: "Left Ctrl",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonLeftStickAlt",
-        id: "keyButtonLeftStickAlt",
-        default: "Left Alt",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonA",
-        id: "keyButtonA",
-        default: "F",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonAAlt",
-        id: "keyButtonAAlt",
-        default: "Return",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonRightStick",
-        id: "keyButtonRightStick",
-        default: "Right Ctrl",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "ButtonRightStickAlt",
-        id: "keyButtonRightStickAlt",
-        default: "Right Alt",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "StickUp",
-        id: "keyStickUp",
+        section: "Keybinds",
+        key: "MoveUp",
+        id: "bindMoveUp",
         default: "W",
         kind: FieldKind::Key,
     },
     Field {
-        section: "Keyboard",
-        key: "StickLeft",
-        id: "keyStickLeft",
-        default: "A",
-        kind: FieldKind::Key,
-    },
-    Field {
-        section: "Keyboard",
-        key: "StickDown",
-        id: "keyStickDown",
+        section: "Keybinds",
+        key: "MoveDown",
+        id: "bindMoveDown",
         default: "S",
         kind: FieldKind::Key,
     },
     Field {
-        section: "Keyboard",
-        key: "StickRight",
-        id: "keyStickRight",
+        section: "Keybinds",
+        key: "MoveLeft",
+        id: "bindMoveLeft",
+        default: "A",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keybinds",
+        key: "MoveRight",
+        id: "bindMoveRight",
         default: "D",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keybinds",
+        key: "Walk",
+        id: "bindWalk",
+        default: "Left Shift",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keybinds",
+        key: "A",
+        id: "bindA",
+        default: "Mouse Right",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keybinds",
+        key: "B",
+        id: "bindB",
+        default: "Space",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keybinds",
+        key: "X",
+        id: "bindX",
+        default: "Mouse Left",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keybinds",
+        key: "Y",
+        id: "bindY",
+        default: "R, Mouse Middle",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keybinds",
+        key: "L",
+        id: "bindL",
+        default: "Q",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keybinds",
+        key: "R",
+        id: "bindR",
+        default: "E",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keybinds",
+        key: "ZL",
+        id: "bindZl",
+        default: "Tab",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keybinds",
+        key: "ZR",
+        id: "bindZr",
+        default: "T",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keybinds",
+        key: "Plus",
+        id: "bindPlus",
+        default: "Return, Keypad Enter",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keybinds",
+        key: "Minus",
+        id: "bindMinus",
+        default: "Backspace",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keybinds",
+        key: "DpadUp",
+        id: "bindDpadUp",
+        default: "Up",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keybinds",
+        key: "DpadDown",
+        id: "bindDpadDown",
+        default: "Down",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keybinds",
+        key: "DpadLeft",
+        id: "bindDpadLeft",
+        default: "Left",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keybinds",
+        key: "DpadRight",
+        id: "bindDpadRight",
+        default: "Right",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keybinds",
+        key: "LeftStickClick",
+        id: "bindLeftStickClick",
+        default: "Left Ctrl, Right Ctrl",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keybinds",
+        key: "RightStickClick",
+        id: "bindRightStickClick",
+        default: "Left Alt, Right Alt",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keybinds",
+        key: "ItemLeft",
+        id: "bindItemLeft",
+        default: "Wheel Up",
+        kind: FieldKind::Key,
+    },
+    Field {
+        section: "Keybinds",
+        key: "ItemRight",
+        id: "bindItemRight",
+        default: "Wheel Down",
         kind: FieldKind::Key,
     },
     Field {
@@ -499,62 +381,6 @@ const FIELDS: &[Field] = &[
         id: "mouseSensitivity",
         default: "1.0",
         kind: FieldKind::Decimal(0.1, 10.0),
-    },
-    Field {
-        section: "Mouse",
-        key: "InvertHorizontal",
-        id: "cameraInvertHorizontal",
-        default: "Off",
-        kind: FieldKind::Toggle,
-    },
-    Field {
-        section: "Mouse",
-        key: "InvertVertical",
-        id: "cameraInvertVertical",
-        default: "Off",
-        kind: FieldKind::Toggle,
-    },
-    Field {
-        section: "Mouse",
-        key: "Smoothing",
-        id: "cameraSmoothing",
-        default: "0.5",
-        kind: FieldKind::Decimal(0.05, 1.0),
-    },
-    Field {
-        section: "Mouse",
-        key: "LeftButton",
-        id: "mouseLeftButton",
-        default: "X",
-        kind: FieldKind::Select(MOUSE_BUTTON_OPTIONS),
-    },
-    Field {
-        section: "Mouse",
-        key: "MiddleButton",
-        id: "mouseMiddleButton",
-        default: "None",
-        kind: FieldKind::Select(MOUSE_BUTTON_OPTIONS),
-    },
-    Field {
-        section: "Mouse",
-        key: "RightButton",
-        id: "mouseRightButton",
-        default: "A",
-        kind: FieldKind::Select(MOUSE_BUTTON_OPTIONS),
-    },
-    Field {
-        section: "Mouse",
-        key: "X1Button",
-        id: "mouseX1Button",
-        default: "None",
-        kind: FieldKind::Select(MOUSE_BUTTON_OPTIONS),
-    },
-    Field {
-        section: "Mouse",
-        key: "X2Button",
-        id: "mouseX2Button",
-        default: "None",
-        kind: FieldKind::Select(MOUSE_BUTTON_OPTIONS),
     },
     Field {
         section: "Multiplayer",
@@ -641,10 +467,9 @@ const CANONICAL_SECTIONS: &[&str] = &[
     "Upscaler",
     "Graphics",
     "Performance",
-    "Controller",
     "Controls",
-    "Keyboard",
     "Mouse",
+    "Keybinds",
     "Multiplayer",
     "Audio",
     "Monster HP",
@@ -752,17 +577,14 @@ fn read_settings(directory: &Path) -> Result<Value, String> {
 
     for field in FIELDS {
         let current_address = address(field.section, field.key);
-        let legacy_address =
-            (field.section == "Controller").then(|| address("Controls", field.key));
+        let legacy_address = (field.section == "Controls")
+            .then(|| address("Controller", field.key));
         if let Some(value) = values.get(&current_address).or_else(|| {
-            legacy_address
-                .as_ref()
-                .and_then(|legacy_address| values.get(legacy_address))
+            legacy_address.as_ref().and_then(|key| values.get(key))
         }) {
             settings.insert(field.id.to_string(), json!(value));
         }
     }
-    migrate_default_keyboard_bindings(settings);
 
     let mut quests = values
         .iter()
@@ -783,25 +605,6 @@ fn read_settings(directory: &Path) -> Result<Value, String> {
         ),
     );
     Ok(Value::Object(settings.clone()))
-}
-
-fn migrate_default_keyboard_bindings(settings: &mut Map<String, Value>) {
-    let is_default =
-        |id: &str, value: &str| settings.get(id).and_then(Value::as_str) == Some(value);
-    if is_default("keyButtonB", "Space")
-        && is_default("keyButtonBAlt", "Return")
-        && is_default("keyButtonA", "F")
-        && is_default("keyButtonAAlt", "Backspace")
-        && is_default("keyButtonPlus", "Return")
-        && is_default("keyButtonPlusAlt", "Keypad Enter")
-        && is_default("keyButtonPlusAlt2", "Escape")
-    {
-        settings.insert("keyButtonBAlt".to_string(), json!("Backspace"));
-        settings.insert("keyButtonAAlt".to_string(), json!("Return"));
-        settings.insert("keyButtonPlus".to_string(), json!("Keypad Enter"));
-        settings.insert("keyButtonPlusAlt".to_string(), json!("Escape"));
-        settings.insert("keyButtonPlusAlt2".to_string(), json!("None"));
-    }
 }
 
 fn string_setting<'a>(settings: &'a Value, id: &str) -> Option<&'a str> {
@@ -848,9 +651,6 @@ fn valid_aspect_ratio(value: &str) -> bool {
 }
 
 fn valid_keyboard_key(value: &str) -> bool {
-    if value.eq_ignore_ascii_case("none") {
-        return true;
-    }
     if value.len() == 1 && value.as_bytes()[0].is_ascii_alphanumeric() {
         return true;
     }
@@ -859,7 +659,6 @@ fn valid_keyboard_key(value: &str) -> bool {
         "Down",
         "Left",
         "Right",
-        "Escape",
         "Return",
         "Keypad Enter",
         "Space",
@@ -871,21 +670,14 @@ fn valid_keyboard_key(value: &str) -> bool {
         "Right Ctrl",
         "Left Alt",
         "Right Alt",
+        "Wheel Up",
+        "Wheel Down",
         "CapsLock",
-        "F1",
         "F2",
         "F3",
         "F4",
         "F5",
         "F6",
-        "F7",
-        "F8",
-        "F9",
-        "F10",
-        "F11",
-        "F12",
-        "Insert",
-        "Delete",
         "Home",
         "End",
         "PageUp",
@@ -895,10 +687,12 @@ fn valid_keyboard_key(value: &str) -> bool {
         "[",
         "]",
         "\\",
-        ";",
+        "Semicolon",
+        "Comma",
+        "Keypad Comma",
+        "Keypad Hash",
         "'",
         "`",
-        ",",
         ".",
         "/",
         "Keypad 0",
@@ -919,6 +713,32 @@ fn valid_keyboard_key(value: &str) -> bool {
     ]
     .iter()
     .any(|key| value.eq_ignore_ascii_case(key))
+        || ["Mouse Left", "Mouse Right", "Mouse Middle", "Mouse 4", "Mouse 5"]
+            .iter()
+            .any(|key| value.eq_ignore_ascii_case(key))
+}
+
+fn valid_key_binding(value: &str) -> bool {
+    if value.contains(['\r', '\n', ';', '#']) {
+        return false;
+    }
+    let keys = value.split(',').map(str::trim).collect::<Vec<_>>();
+    if keys.is_empty() || keys.len() > 2 || keys.iter().any(|key| key.is_empty()) {
+        return false;
+    }
+    if keys.len() == 1 && keys[0].eq_ignore_ascii_case("none") {
+        return true;
+    }
+    keys.iter().all(|key| {
+        !key.eq_ignore_ascii_case("none")
+            && !matches!(
+                key.to_ascii_lowercase().as_str(),
+                "escape" | "esc" | "insert" | "f1" | "f7" | "f8" | "f9" | "f10" | "f11" | "f12"
+            )
+            && (valid_keyboard_key(key)
+                || key.eq_ignore_ascii_case("Wheel Up")
+                || key.eq_ignore_ascii_case("Wheel Down"))
+    })
 }
 
 fn validate_settings(settings: &Value) -> HashMap<String, String> {
@@ -951,8 +771,12 @@ fn validate_settings(settings: &Value) -> HashMap<String, String> {
             }
             FieldKind::AspectRatio => (!valid_aspect_ratio(value))
                 .then(|| "AspectRatio must be Auto or a ratio from 0.5 to 10.".to_string()),
-            FieldKind::Key => (!valid_keyboard_key(value))
-                .then(|| format!("{} must be a supported keyboard key.", field.key)),
+            FieldKind::Key => (!valid_key_binding(value)).then(|| {
+                format!(
+                    "{} must contain one or two supported keys or mouse buttons.",
+                    field.key
+                )
+            }),
             FieldKind::Resolution | FieldKind::RenderResolution => {
                 let special = match field.kind {
                     FieldKind::Resolution => value == "Auto" || value == "Desktop",
@@ -1088,6 +912,96 @@ fn append_missing_entries(
     }
 }
 
+fn is_deprecated_ini_entry(section: &str, key: &str) -> bool {
+    let section = normalize(section);
+    let key = normalize(key);
+    match section.as_str() {
+        "mouse" => [
+            "InvertHorizontal",
+            "InvertVertical",
+            "Smoothing",
+            "LeftButton",
+            "MiddleButton",
+            "RightButton",
+            "X1Button",
+            "X2Button",
+        ]
+        .iter()
+        .any(|candidate| key == normalize(candidate)),
+        "keyboard" => [
+            "DpadUp",
+            "DpadUpAlt",
+            "DpadRight",
+            "DpadRightAlt",
+            "DpadDown",
+            "DpadDownAlt",
+            "DpadLeft",
+            "DpadLeftAlt",
+            "ButtonA",
+            "ButtonAAlt",
+            "ButtonB",
+            "ButtonBAlt",
+            "ButtonX",
+            "ButtonXAlt",
+            "ButtonY",
+            "ButtonYAlt",
+            "ButtonL",
+            "ButtonLAlt",
+            "ButtonR",
+            "ButtonRAlt",
+            "ButtonZL",
+            "ButtonZLAlt",
+            "ButtonZR",
+            "ButtonZRAlt",
+            "ButtonPlus",
+            "ButtonPlusAlt",
+            "ButtonPlusAlt2",
+            "ButtonMinus",
+            "ButtonMinusAlt",
+            "ButtonLeftStick",
+            "ButtonLeftStickAlt",
+            "ButtonRightStick",
+            "ButtonRightStickAlt",
+            "StickUp",
+            "StickLeft",
+            "StickDown",
+            "StickRight",
+        ]
+        .iter()
+        .any(|candidate| key == normalize(candidate)),
+        "controller" => ["FaceButtons", "BackgroundInput", "Rumble"]
+            .iter()
+            .any(|candidate| key == normalize(candidate)),
+        _ => false,
+    }
+}
+
+fn should_discard_ini_section(lines: &[String], target_section: &str) -> bool {
+    let target_section = normalize(target_section);
+    let mut section = String::new();
+    let mut found_deprecated_entry = false;
+    for line in lines {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            if let Some(close) = trimmed.find(']') {
+                section = normalize(&trimmed[1..close]);
+            }
+            continue;
+        }
+        if section != target_section || trimmed.starts_with(';') || trimmed.starts_with('#') {
+            continue;
+        }
+        let Some(separator) = trimmed.find('=') else {
+            continue;
+        };
+        if !is_deprecated_ini_entry(&section, trimmed[..separator].trim()) {
+            return false;
+        }
+        found_deprecated_entry = true;
+    }
+    found_deprecated_entry
+}
+
 fn save_settings(directory: &Path, settings: &Value) -> Result<(), String> {
     let errors = validate_settings(settings);
     if !errors.is_empty() {
@@ -1102,24 +1016,34 @@ fn save_settings(directory: &Path, settings: &Value) -> Result<(), String> {
     };
     let original_lines = split_ini(&original_content);
     let existing = parse_ini(&original_lines);
+    let discard_keyboard_section = should_discard_ini_section(&original_lines, "Keyboard");
+    let discard_controller_section = should_discard_ini_section(&original_lines, "Controller");
+    let mut section = String::new();
+    let has_deprecated_entries = original_lines.iter().any(|line| {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            if let Some(close) = trimmed.find(']') {
+                section = trimmed[1..close].to_string();
+            }
+            return false;
+        }
+        let Some(separator) = trimmed.find('=') else {
+            return false;
+        };
+        is_deprecated_ini_entry(&section, trimmed[..separator].trim())
+    });
     let current_settings = read_settings(directory)?;
     let mut updates = Vec::new();
     for field in FIELDS {
         let value = string_setting(settings, field.id).unwrap_or_default();
-        if current_settings.get(field.id).and_then(Value::as_str) != Some(value) {
-            let current_address = address(field.section, field.key);
-            let legacy_address =
-                (field.section == "Controller").then(|| address("Controls", field.key));
-            let update_address = match legacy_address {
-                Some(legacy_address)
-                    if !existing.contains_key(&current_address)
-                        && existing.contains_key(&legacy_address) =>
-                {
-                    legacy_address
-                }
-                _ => current_address,
-            };
-            updates.push((update_address, value.to_string()));
+        let current_address = address(field.section, field.key);
+        let needs_legacy_migration = field.section == "Controls"
+            && !existing.contains_key(&current_address)
+            && existing.contains_key(&address("Controller", field.key));
+        if current_settings.get(field.id).and_then(Value::as_str) != Some(value)
+            || needs_legacy_migration
+        {
+            updates.push((current_address, value.to_string()));
         }
     }
     let quest_values = |settings: &Value| {
@@ -1145,7 +1069,7 @@ fn save_settings(directory: &Path, settings: &Value) -> Result<(), String> {
             }
         }
     }
-    if updates.is_empty() && !update_quests {
+    if updates.is_empty() && !update_quests && !has_deprecated_entries {
         return Ok(());
     }
 
@@ -1163,7 +1087,7 @@ fn save_settings(directory: &Path, settings: &Value) -> Result<(), String> {
     }
 
     let mut output = Vec::new();
-    let mut section = String::new();
+    section.clear();
     for line in &original_lines {
         let trimmed = line.trim();
         if trimmed.starts_with('[') {
@@ -1172,9 +1096,17 @@ fn save_settings(directory: &Path, settings: &Value) -> Result<(), String> {
                 section = normalize(&trimmed[1..close]);
             }
         }
+        if (section == "keyboard" && discard_keyboard_section)
+            || (section == "controller" && discard_controller_section)
+        {
+            continue;
+        }
         if !trimmed.starts_with(';') && !trimmed.starts_with('#') {
             if let Some(separator) = trimmed.find('=') {
                 let key = normalize(trimmed[..separator].trim());
+                if is_deprecated_ini_entry(&section, &key) {
+                    continue;
+                }
                 let current_address = format!("{section}|{key}");
                 let is_quest = section == "monsterhp" && key.starts_with("quest");
                 if update_quests
@@ -1561,7 +1493,7 @@ mod tests {
         settings["fov"] = json!("1.2");
         settings["uiAnchor"] = json!("Edges");
         settings["backgroundInput"] = json!("Off");
-        settings["rumble"] = json!("Off");
+        settings["rumble"] = json!("On");
         assert!(validate_settings(&settings).is_empty());
         save_settings(&directory, &settings).expect("save display settings");
 
@@ -1569,13 +1501,13 @@ mod tests {
         assert!(output.contains("AspectRatio = 21:9"));
         assert!(output.contains("FOV = 1.2"));
         assert!(output.contains("UIAnchor = Edges"));
-        assert!(output.contains("[Controller]\nBackgroundInput = Off\nRumble = Off"));
+        assert!(output.contains("[Controls]\nBackgroundInput = Off\nRumble = On"));
         let loaded = read_settings(&directory).expect("reload settings");
         assert_eq!(loaded["aspectRatio"], "21:9");
         assert_eq!(loaded["fov"], "1.2");
         assert_eq!(loaded["uiAnchor"], "Edges");
         assert_eq!(loaded["backgroundInput"], "Off");
-        assert_eq!(loaded["rumble"], "Off");
+        assert_eq!(loaded["rumble"], "On");
 
         settings["aspectRatio"] = json!("21:0");
         assert!(validate_settings(&settings).contains_key("aspectRatio"));
@@ -1585,48 +1517,49 @@ mod tests {
     }
 
     #[test]
-    fn camera_settings_round_trip() {
+    fn mouse_and_item_bar_settings_round_trip() {
         let directory = temp_directory();
+        fs::write(ini_path(&directory), "[Mouse]\nMouseSensitivity = 1.0\n")
+            .expect("write mouse settings");
         let mut settings = default_settings();
+        assert_eq!(settings["bindItemLeft"], "Wheel Up");
+        assert_eq!(settings["bindItemRight"], "Wheel Down");
         settings["mouseSensitivity"] = json!("1.5");
-        settings["cameraSmoothing"] = json!("0.7");
-        settings["cameraInvertHorizontal"] = json!("On");
-        settings["cameraInvertVertical"] = json!("On");
+        settings["bindItemLeft"] = json!("J");
+        settings["bindItemRight"] = json!("Wheel Up");
         assert!(validate_settings(&settings).is_empty());
 
-        save_settings(&directory, &settings).expect("save camera settings");
-        let output = fs::read_to_string(ini_path(&directory)).expect("read camera settings");
+        save_settings(&directory, &settings).expect("save mouse and item bar settings");
+        let output =
+            fs::read_to_string(ini_path(&directory)).expect("read mouse and item bar settings");
         assert!(output.contains("MouseSensitivity = 1.5"));
-        assert!(output.contains("[Mouse]\nMouseSensitivity = 1.5\nInvertHorizontal = On"));
-        assert!(output.contains("InvertVertical = On"));
-        assert!(output.contains("Smoothing = 0.7"));
+        assert!(output.contains("[Keybinds]\nItemLeft = J\nItemRight = Wheel Up"));
 
-        let loaded = read_settings(&directory).expect("reload camera settings");
+        let loaded = read_settings(&directory).expect("reload mouse and item bar settings");
         assert_eq!(loaded["mouseSensitivity"], "1.5");
-        assert_eq!(loaded["cameraSmoothing"], "0.7");
-        assert_eq!(loaded["cameraInvertHorizontal"], "On");
-        assert_eq!(loaded["cameraInvertVertical"], "On");
+        assert_eq!(loaded["bindItemLeft"], "J");
+        assert_eq!(loaded["bindItemRight"], "Wheel Up");
         fs::remove_dir_all(directory).expect("clean temp directory");
     }
 
     #[test]
-    fn controller_settings_read_legacy_controls_section() {
+    fn controller_settings_migrate_legacy_controller_section() {
         let directory = temp_directory();
-        let original = "[Controls]\nFaceButtons = Label\nBackgroundInput = Off\n";
+        let original = "[Controller]\nFaceButtons = Label\nBackgroundInput = Off\nRumble = Off\n";
         fs::write(ini_path(&directory), original).expect("write legacy controller settings");
 
         let mut settings = read_settings(&directory).expect("load legacy settings");
         assert_eq!(settings["faceButtons"], "Label");
         assert_eq!(settings["backgroundInput"], "Off");
-        assert_eq!(settings["rumble"], "On");
+        assert_eq!(settings["rumble"], "Off");
 
         settings["backgroundInput"] = json!("On");
-        settings["rumble"] = json!("Off");
         save_settings(&directory, &settings).expect("save updated controller settings");
 
         let output = fs::read_to_string(ini_path(&directory)).expect("read updated ini");
-        assert!(output.contains("[Controls]\nFaceButtons = Label\nBackgroundInput = On"));
-        assert!(output.contains("[Controller]\nRumble = Off"));
+        assert!(!output.contains("[Controller]"));
+        assert!(output.contains("[Controls]\nFaceButtons = Label"));
+        assert!(output.contains("[Controls]\nBackgroundInput = On"));
         let loaded = read_settings(&directory).expect("reload controller settings");
         assert_eq!(loaded["faceButtons"], "Label");
         assert_eq!(loaded["backgroundInput"], "On");
@@ -1635,111 +1568,67 @@ mod tests {
     }
 
     #[test]
-    fn keyboard_bindings_are_validated_and_saved_in_keyboard_section() {
+    fn saving_removes_deprecated_bindings_and_preserves_unknown_settings() {
         let directory = temp_directory();
-        let mut settings = default_settings();
-        settings["keyButtonX"] = json!("H");
-        settings["keyButtonXAlt"] = json!("J");
-        settings["keyButtonYAlt"] = json!("K");
-        settings["keyButtonLAlt"] = json!("M");
-        settings["keyButtonRAlt"] = json!("N");
-        settings["keyButtonZlAlt"] = json!("O");
-        settings["keyButtonZrAlt"] = json!("P");
-        settings["keyButtonLeftStickAlt"] = json!("Home");
-        settings["keyButtonRightStickAlt"] = json!("End");
-        settings["keyDpadUp"] = json!("I");
-        settings["keyDpadUpAlt"] = json!("Up");
-        assert!(validate_settings(&settings).is_empty());
-        save_settings(&directory, &settings).expect("save keyboard bindings");
+        fs::write(
+            ini_path(&directory),
+            "[Mouse]\nMouseSensitivity = 1.0\nFutureMouseOption = preserve-mouse\n\
+             InvertHorizontal = On\nSmoothing = 0.7\nLeftButton = X\n\
+             [Keyboard]\nButtonA = F\nStickUp = W\n[Controller]\nFaceButtons = Label\nRumble = Off\n\
+             FutureControllerOption = preserve-controller\n\
+             [Future section]\nFutureOption = preserve-me\n",
+        )
+        .expect("write deprecated and unknown settings");
 
-        let output = fs::read_to_string(ini_path(&directory)).expect("read updated ini");
-        assert!(output.contains("ButtonX = H"));
-        assert!(output.contains("ButtonXAlt = J"));
-        assert!(output.contains("ButtonYAlt = K"));
-        assert!(output.contains("ButtonLAlt = M"));
-        assert!(output.contains("ButtonRAlt = N"));
-        assert!(output.contains("ButtonZLAlt = O"));
-        assert!(output.contains("ButtonZRAlt = P"));
-        assert!(output.contains("ButtonLeftStickAlt = Home"));
-        assert!(output.contains("ButtonRightStickAlt = End"));
-        assert!(output.contains("[Keyboard]\nDpadUp = I\n"));
-        let loaded = read_settings(&directory).expect("reload settings");
-        assert_eq!(loaded["keyButtonX"], "H");
-        assert_eq!(loaded["keyButtonXAlt"], "J");
-        assert_eq!(loaded["keyButtonYAlt"], "K");
-        assert_eq!(loaded["keyButtonLAlt"], "M");
-        assert_eq!(loaded["keyButtonRAlt"], "N");
-        assert_eq!(loaded["keyButtonZlAlt"], "O");
-        assert_eq!(loaded["keyButtonZrAlt"], "P");
-        assert_eq!(loaded["keyButtonLeftStickAlt"], "Home");
-        assert_eq!(loaded["keyButtonRightStickAlt"], "End");
-        assert_eq!(
-            loaded["keyDpadUp"],
-            "I"
-        );
-        assert_eq!(
-            loaded["keyDpadUpAlt"],
-            "Up"
-        );
-
-        settings["keyDpadUp"] = json!("not-a-key");
-        assert!(validate_settings(&settings).contains_key("keyDpadUp"));
-        settings["keyDpadUp"] = json!("None");
-        assert!(validate_settings(&settings).is_empty());
+        save_settings(&directory, &default_settings()).expect("clean deprecated settings");
+        let output = fs::read_to_string(ini_path(&directory)).expect("read cleaned ini");
+        assert!(output.contains("MouseSensitivity = 1.0"));
+        assert!(output.contains("FutureMouseOption = preserve-mouse"));
+        assert!(output.contains("FutureControllerOption = preserve-controller"));
+        assert!(output.contains("FutureOption = preserve-me"));
+        assert!(!output.contains("[Keyboard]"));
+        assert!(!output.contains("InvertHorizontal"));
+        assert!(!output.contains("Smoothing"));
+        assert!(!output.contains("LeftButton ="));
+        assert!(!output.contains("ButtonA ="));
+        assert!(!output.contains("StickUp ="));
+        assert!(!output.contains("FaceButtons = Label"));
+        assert!(!output.contains("Rumble = Off"));
         fs::remove_dir_all(directory).expect("clean temp directory");
     }
 
     #[test]
-    fn mouse_button_assignments_are_validated_and_saved_in_mouse_section() {
+    fn keybinds_accept_two_keys_mouse_buttons_and_wheel() {
         let directory = temp_directory();
         let mut settings = default_settings();
-        assert_eq!(settings["mouseLeftButton"], "X");
-        assert_eq!(settings["mouseRightButton"], "A");
-        settings["mouseLeftButton"] = json!("B");
-        settings["mouseMiddleButton"] = json!("D-pad Up");
-        settings["mouseRightButton"] = json!("None");
+        settings["bindA"] = json!("J, Mouse 4");
+        settings["bindY"] = json!("K, Mouse Middle");
+        settings["bindDpadUp"] = json!("I");
+        settings["bindItemLeft"] = json!("Wheel Down");
         assert!(validate_settings(&settings).is_empty());
-        save_settings(&directory, &settings).expect("save mouse button assignments");
+        save_settings(&directory, &settings).expect("save keybinds");
 
         let output = fs::read_to_string(ini_path(&directory)).expect("read updated ini");
-        assert!(output.contains("[Mouse]\nLeftButton = B\n"));
-        assert!(output.contains("MiddleButton = D-pad Up\n"));
-        assert!(output.contains("RightButton = None\n"));
+        assert!(output.contains("[Keybinds]\nA = J, Mouse 4"));
+        assert!(output.contains("Y = K, Mouse Middle"));
+        assert!(output.contains("DpadUp = I"));
+        assert!(output.contains("ItemLeft = Wheel Down"));
         let loaded = read_settings(&directory).expect("reload settings");
-        assert_eq!(loaded["mouseLeftButton"], "B");
-        assert_eq!(loaded["mouseMiddleButton"], "D-pad Up");
-        assert_eq!(loaded["mouseRightButton"], "None");
+        assert_eq!(loaded["bindA"], "J, Mouse 4");
+        assert_eq!(loaded["bindY"], "K, Mouse Middle");
+        assert_eq!(loaded["bindDpadUp"], "I");
+        assert_eq!(loaded["bindItemLeft"], "Wheel Down");
 
-        settings["mouseLeftButton"] = json!("invalid");
-        assert!(validate_settings(&settings).contains_key("mouseLeftButton"));
-        fs::remove_dir_all(directory).expect("clean temp directory");
-    }
-
-    #[test]
-    fn old_default_keyboard_mapping_migrates_without_rewriting_custom_mappings() {
-        let directory = temp_directory();
-        fs::write(
-            ini_path(&directory),
-            "[Keyboard]\nButtonB = Space\nButtonBAlt = Return\nButtonA = F\nButtonAAlt = Backspace\nButtonPlus = Return\nButtonPlusAlt = Keypad Enter\nButtonPlusAlt2 = Escape\n",
-        )
-        .expect("write old default bindings");
-        let settings = read_settings(&directory).expect("load old defaults");
-        assert_eq!(settings["keyButtonBAlt"], "Backspace");
-        assert_eq!(settings["keyButtonAAlt"], "Return");
-        assert_eq!(settings["keyButtonPlus"], "Keypad Enter");
-        assert_eq!(settings["keyButtonPlusAlt"], "Escape");
-        assert_eq!(settings["keyButtonPlusAlt2"], "None");
-
-        fs::write(
-            ini_path(&directory),
-            "[Keyboard]\nButtonB = Space\nButtonBAlt = Return\nButtonA = F\nButtonAAlt = Backspace\nButtonPlus = Return\nButtonPlusAlt = Keypad Enter\nButtonPlusAlt2 = Escape\nButtonY = U\n",
-        )
-        .expect("write customized bindings");
-        let settings = read_settings(&directory).expect("load customized bindings");
-        assert_eq!(settings["keyButtonPlus"], "Keypad Enter");
-        assert_eq!(settings["keyButtonBAlt"], "Backspace");
-        assert_eq!(settings["keyButtonAAlt"], "Return");
-        assert_eq!(settings["keyButtonY"], "U");
+        settings["bindDpadUp"] = json!("not-a-key");
+        assert!(validate_settings(&settings).contains_key("bindDpadUp"));
+        settings["bindDpadUp"] = json!("None");
+        assert!(validate_settings(&settings).is_empty());
+        settings["bindDpadUp"] = json!("Escape");
+        assert!(validate_settings(&settings).contains_key("bindDpadUp"));
+        settings["bindDpadUp"] = json!("W, A, S");
+        assert!(validate_settings(&settings).contains_key("bindDpadUp"));
+        settings["bindDpadUp"] = json!("W,\nA");
+        assert!(validate_settings(&settings).contains_key("bindDpadUp"));
         fs::remove_dir_all(directory).expect("clean temp directory");
     }
 }

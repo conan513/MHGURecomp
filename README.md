@@ -203,10 +203,11 @@ anti-aliasing, VSync, controls and volume apply when you save; the settings mark
 
 ### Building on Windows
 
-With the MSYS2 UCRT64 build dependencies installed, run `make -j2` from the repository. On Windows, a successful
-build also copies the complete runtime package (the executables, required DLLs, and any built game/data files) to
-`F:\mhgu-build-tools\build`. Override the destination with `make PACKAGE_DIR=/f/another/path -j2` if needed. The package
-does not include game files unless you supplied your own dump for the build; the release still needs your own game data.
+With the MSYS2 UCRT64 build dependencies, Node.js 22+, and stable Rust installed, run `make -j2` from the repository.
+On Windows, this builds both `mhgurecomp.exe` and `MHGU-Launcher.exe`, then copies the complete runtime package
+(executables, required DLLs, and any built game/data files) to `F:\mhgu-build-tools\build`. Override the destination
+with `make PACKAGE_DIR=/f/another/path -j2` if needed. The package does not include game files unless you supplied
+your own dump for the build; the release still needs your own game data.
 
 ### Multiplayer
 
@@ -331,7 +332,7 @@ make -j4 GAME=/c/path/to/game      # compile everything into build/
 
 `make gen` is required before the full build: it creates the game sources used to build `mhgugame.dll`. The game code
 is not included in the repository. If you only want to build the runtime without your game files, use
-`make -j4 build/mhgurecomp.exe bundle SKIP_GAMELIB=1`.
+`make -j4 build/mhgurecomp.exe bundle launcher SKIP_GAMELIB=1`.
 
 The GitHub Actions workflow builds and tests the launcher and runtime only. Its
 `MHGURecomp-Runtime-Windows` artifact does not include `mhgugame.dll` or game data: generated game code is not stored

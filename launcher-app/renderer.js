@@ -22,56 +22,53 @@ const categories = [
   { id: 'gameplay', title: 'Gameplay', icon: '⚔' },
 ];
 
-const keyboardBindings = [
-  ['keyDpadUp', 'D-pad up'], ['keyDpadUpAlt', 'D-pad up (alternate)'],
-  ['keyDpadRight', 'D-pad right'], ['keyDpadRightAlt', 'D-pad right (alternate)'],
-  ['keyDpadDown', 'D-pad down'], ['keyDpadDownAlt', 'D-pad down (alternate)'],
-  ['keyDpadLeft', 'D-pad left'], ['keyDpadLeftAlt', 'D-pad left (alternate)'],
-  ['keyButtonA', 'A button'], ['keyButtonAAlt', 'A button (confirm)'],
-  ['keyButtonB', 'B button'], ['keyButtonBAlt', 'B button (back)'],
-  ['keyButtonX', 'X button'], ['keyButtonXAlt', 'X button (alternate)'],
-  ['keyButtonY', 'Y button'], ['keyButtonYAlt', 'Y button (alternate)'],
-  ['keyButtonL', 'L button'], ['keyButtonLAlt', 'L button (alternate)'],
-  ['keyButtonR', 'R button'], ['keyButtonRAlt', 'R button (alternate)'],
-  ['keyButtonZl', 'ZL button'], ['keyButtonZlAlt', 'ZL button (alternate)'],
-  ['keyButtonZr', 'ZR button'], ['keyButtonZrAlt', 'ZR button (alternate)'],
-  ['keyButtonPlus', 'Plus button'],
-  ['keyButtonPlusAlt', 'Plus button (alternate)'], ['keyButtonPlusAlt2', 'Plus button (optional)'],
-  ['keyButtonMinus', 'Minus button'], ['keyButtonMinusAlt', 'Minus button (alternate)'],
-  ['keyButtonLeftStick', 'Left stick click'], ['keyButtonLeftStickAlt', 'Left stick click (alternate)'],
-  ['keyButtonRightStick', 'Right stick click'], ['keyButtonRightStickAlt', 'Right stick click (alternate)'],
-  ['keyStickUp', 'Move up'], ['keyStickLeft', 'Move left'], ['keyStickDown', 'Move down'],
-  ['keyStickRight', 'Move right'],
+const movementBindings = [
+  ['bindMoveUp', 'Move up'], ['bindMoveDown', 'Move down'],
+  ['bindMoveLeft', 'Move left'], ['bindMoveRight', 'Move right'],
+  ['bindWalk', 'Walk'],
 ];
-
-const mouseBindings = [
-  ['mouseLeftButton', 'Mouse left button'], ['mouseMiddleButton', 'Mouse middle button'],
-  ['mouseRightButton', 'Mouse right button'], ['mouseX1Button', 'Mouse side button X1'],
-  ['mouseX2Button', 'Mouse side button X2'],
+const buttonBindings = [
+  ['bindA', 'A button'], ['bindB', 'B button'], ['bindX', 'X button'],
+  ['bindY', 'Y button'], ['bindL', 'L button'], ['bindR', 'R button'],
+  ['bindZl', 'ZL button'], ['bindZr', 'ZR button'],
+  ['bindPlus', 'Plus button'], ['bindMinus', 'Minus button'],
 ];
-
-const movementBindingStart = keyboardBindings.findIndex(([id]) => id === 'keyStickUp');
+const dpadBindings = [
+  ['bindDpadUp', 'D-pad up'], ['bindDpadDown', 'D-pad down'],
+  ['bindDpadLeft', 'D-pad left'], ['bindDpadRight', 'D-pad right'],
+];
+const stickBindings = [
+  ['bindLeftStickClick', 'Left stick click'],
+  ['bindRightStickClick', 'Right stick click'],
+];
 
 const controlIslands = [
   {
     title: 'Mouse',
-    fields: ['mouseSensitivity', 'cameraSmoothing', 'cameraInvertHorizontal', 'cameraInvertVertical',
-      ...mouseBindings.map(([id]) => id)],
+    fields: ['mouseSensitivity'],
   },
   {
-    title: 'Keyboard',
+    title: 'Item bar',
+    fields: ['bindItemLeft', 'bindItemRight'],
+  },
+  {
+    title: 'Keybinds',
     groups: [
       {
-        title: 'D-pad',
-        fields: keyboardBindings.slice(0, 8).map(([id]) => id),
+        title: 'Movement',
+        fields: movementBindings.map(([id]) => id),
       },
       {
         title: 'Buttons',
-        fields: keyboardBindings.slice(8, movementBindingStart).map(([id]) => id),
+        fields: buttonBindings.map(([id]) => id),
       },
       {
-        title: 'Movement',
-        fields: keyboardBindings.slice(movementBindingStart).map(([id]) => id),
+        title: 'D-pad',
+        fields: dpadBindings.map(([id]) => id),
+      },
+      {
+        title: 'Stick clicks',
+        fields: stickBindings.map(([id]) => id),
       },
     ],
   },
@@ -201,27 +198,10 @@ const fieldInfo = {
     min: 0.1,
     max: 10,
     step: 0.1,
+    help: 'In a hunt, mouse movement directly turns the camera; elsewhere it controls the right stick. Click in the game window to capture the mouse.',
   },
-  cameraSmoothing: {
-    label: 'Camera response',
-    kind: 'preset',
-    options: ['0.2', '0.35', '0.5', '0.7', '1.0'],
-    customType: 'number',
-    min: 0.05,
-    max: 1,
-    step: 0.05,
-    help: 'Lower values smooth movement more but respond more slowly; 1.0 responds immediately.',
-  },
-  cameraInvertHorizontal: { label: 'Invert horizontal look', kind: 'toggle' },
-  cameraInvertVertical: { label: 'Invert vertical look', kind: 'toggle' },
-  mouseButton: {
-    kind: 'select',
-    options: [
-      'None', 'A', 'B', 'X', 'Y', 'L Stick', 'R Stick', 'L', 'R', 'ZL', 'ZR', 'Plus', 'Minus',
-      'D-pad Left', 'D-pad Up', 'D-pad Right', 'D-pad Down',
-    ],
-    help: 'Choose the Switch button this mouse button activates. The click that captures the mouse is not sent to the game.',
-  },
+  bindItemLeft: { label: 'Turn item bar left', kind: 'key', help: 'Assign up to two keys, mouse buttons, or the mouse wheel.' },
+  bindItemRight: { label: 'Turn item bar right', kind: 'key', help: 'Assign up to two keys, mouse buttons, or the mouse wheel.' },
   hubServer: {
     label: 'Hub server address',
     kind: 'text',
@@ -241,17 +221,12 @@ const fieldInfo = {
   hp4: { label: '4 hunters', kind: 'number', min: 0.05, max: 20 },
   quests: { label: 'Per-quest HP multipliers', kind: 'quests', help: 'One multiplier or four comma-separated player-count values per quest. Example: Quest123 = 1.0, 1.2, 1.5, 2.0' },
 };
-for (const [id, label] of keyboardBindings) {
+for (const [id, label] of [...movementBindings, ...buttonBindings, ...dpadBindings, ...stickBindings]) {
   fieldInfo[id] = {
     label,
     kind: 'key',
-    help: id === 'keyButtonPlusAlt2'
-      ? 'Optional. Press Delete while assigning to leave this binding empty.'
-      : 'Click, then press a key to assign it.',
+    help: 'Click, then press up to two keys, mouse buttons, or mouse-wheel directions.',
   };
-}
-for (const [id, label] of mouseBindings) {
-  fieldInfo[id] = { ...fieldInfo.mouseButton, label };
 }
 
 const elements = Object.fromEntries([
@@ -265,6 +240,8 @@ let activeCategory = 'display';
 let isDirty = false;
 let toastTimer = null;
 let listeningForBinding = null;
+let capturedBindings = [];
+let capturedMouseTarget = null;
 
 function makeElement(tag, className, text) {
   const element = document.createElement(tag);
@@ -339,10 +316,11 @@ function createField(id) {
     control.addEventListener('click', () => {
       if (listeningForBinding === control) {
         listeningForBinding = null;
-        writeVisibleFields();
+        control.textContent = control.dataset.boundKey ?? '';
       } else {
         listeningForBinding = control;
-        control.textContent = 'Press a key…';
+        capturedBindings = [];
+        control.textContent = 'Press up to two inputs…';
       }
     });
   } else if (info.kind === 'select' || info.kind === 'toggle') {
@@ -519,40 +497,97 @@ function readVisibleFields() {
 }
 
 function keyNameFromCode(code) {
+  if (code === 'Insert' || /^F(1|[7-9]|1[0-2])$/.test(code)) return null;
   if (/^Key[A-Z]$/.test(code)) return code.slice(3);
   if (/^Digit[0-9]$/.test(code)) return code.slice(5);
   if (/^F([1-9]|1[0-2])$/.test(code)) return code;
   if (/^Numpad[0-9]$/.test(code)) return `Keypad ${code.slice(6)}`;
   const names = {
     ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right',
-    Escape: 'Escape', Enter: 'Return', NumpadEnter: 'Keypad Enter', Space: 'Space', Tab: 'Tab',
+    Enter: 'Return', NumpadEnter: 'Keypad Enter', Space: 'Space', Tab: 'Tab',
     Backspace: 'Backspace', ShiftLeft: 'Left Shift', ShiftRight: 'Right Shift',
     ControlLeft: 'Left Ctrl', ControlRight: 'Right Ctrl', AltLeft: 'Left Alt', AltRight: 'Right Alt',
-    CapsLock: 'CapsLock', Insert: 'Insert',     Delete: 'None', Home: 'Home', End: 'End',
+    CapsLock: 'CapsLock', Delete: 'None', Home: 'Home', End: 'End',
     PageUp: 'PageUp', PageDown: 'PageDown', Minus: '-', Equal: '=', BracketLeft: '[',
-    BracketRight: ']', Backslash: '\\', Semicolon: ';', Quote: "'", Backquote: '`',
-    Comma: ',', Period: '.', Slash: '/', NumpadAdd: 'Keypad +', NumpadSubtract: 'Keypad -',
+    BracketRight: ']', Backslash: '\\', Semicolon: 'Semicolon', Quote: "'", Backquote: '`',
+    Comma: 'Comma', Period: '.', Slash: '/', NumpadAdd: 'Keypad +', NumpadSubtract: 'Keypad -',
     NumpadMultiply: 'Keypad *', NumpadDivide: 'Keypad /', NumpadDecimal: 'Keypad .',
+    NumpadComma: 'Keypad Comma', NumpadHash: 'Keypad Hash',
   };
+  if (code === 'Escape') return 'Escape';
   return names[code] ?? null;
+}
+
+function acceptBinding(name) {
+  const control = listeningForBinding;
+  if (!control) return;
+  if (name === 'None') {
+    capturedBindings = ['None'];
+  } else {
+    capturedBindings = [...capturedBindings.filter((binding) => binding !== 'None'), name]
+      .slice(0, 2);
+  }
+  control.dataset.boundKey = capturedBindings.join(', ');
+  settings[control.dataset.setting] = control.dataset.boundKey;
+  control.textContent = capturedBindings.length < 2 && capturedBindings[0] !== 'None'
+    ? `${control.dataset.boundKey} — press another or click to finish`
+    : control.dataset.boundKey;
+  elements['form-error'].hidden = true;
+  setDirty(true);
+  if (capturedBindings.length === 2 || capturedBindings[0] === 'None') {
+    listeningForBinding = null;
+  }
 }
 
 document.addEventListener('keydown', (event) => {
   if (!listeningForBinding) return;
   event.preventDefault();
   event.stopImmediatePropagation();
+  if (event.code === 'Escape') {
+    const control = listeningForBinding;
+    listeningForBinding = null;
+    control.textContent = control.dataset.boundKey ?? '';
+    return;
+  }
   const name = keyNameFromCode(event.code);
   if (!name) {
     showToast('That key is not supported for bindings.', true);
     return;
   }
-  const control = listeningForBinding;
-  listeningForBinding = null;
-  control.dataset.boundKey = name;
-  control.textContent = name;
-  elements['form-error'].hidden = true;
-  setDirty(true);
+  acceptBinding(name);
 });
+
+document.addEventListener('mousedown', (event) => {
+  if (!listeningForBinding || event.target === listeningForBinding) return;
+  const names = ['Mouse Left', 'Mouse Middle', 'Mouse Right', 'Mouse 4', 'Mouse 5'];
+  const name = names[event.button];
+  if (!name) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  capturedMouseTarget = event.target;
+  acceptBinding(name);
+});
+
+function preventCapturedClick(event) {
+  if (event.target !== capturedMouseTarget) return;
+  capturedMouseTarget = null;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}
+
+document.addEventListener('click', preventCapturedClick, true);
+document.addEventListener('auxclick', preventCapturedClick, true);
+document.addEventListener('mouseup', () => {
+  setTimeout(() => { capturedMouseTarget = null; }, 0);
+}, true);
+
+document.addEventListener('wheel', (event) => {
+  if (!listeningForBinding || event.deltaY === 0) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  const name = event.deltaY < 0 ? 'Wheel Up' : 'Wheel Down';
+  acceptBinding(name);
+}, { passive: false });
 
 function showSaveError(result) {
   const messages = result.validation ? Object.values(result.validation) : [result.message];
