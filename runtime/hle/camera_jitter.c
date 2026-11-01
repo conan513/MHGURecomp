@@ -166,8 +166,8 @@ static void projection_at(Cpu *c, uint32_t fn) {
     memcpy(r->view, g_views[v].m, 64);
     memcpy(r->proj, m, 64);
     r->jitter[0] = jx, r->jitter[1] = jy;
-    r->far_plane = cam_far;
-    r->near_plane = cam_near;
+    r->far_plane = LDF(cam + CAM_FAR);
+    r->near_plane = LDF(cam + CAM_NEAR);
     r->fovy = m[5] > 0 ? 2.0f * atanf(1.0f / m[5]) : 1.0f;
     r->cam = cam;
     uint64_t seq = g_seq;
