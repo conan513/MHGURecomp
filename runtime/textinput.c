@@ -57,12 +57,13 @@ int textinput_poll(char *out, size_t size, int *chars) {
     return ev;
 }
 
-bool textinput_active(void) {
+void textinput_peek(char *out, size_t size) {
     pthread_mutex_lock(&g_lock);
-    bool active = g_active;
+    snprintf(out, size, "%s", g_text);
     pthread_mutex_unlock(&g_lock);
-    return active;
 }
+
+bool textinput_active(void) { return __atomic_load_n(&g_active, __ATOMIC_RELAXED); }
 
 void textinput_type(const char *s) {
     pthread_mutex_lock(&g_lock);

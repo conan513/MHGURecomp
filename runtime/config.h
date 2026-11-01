@@ -12,47 +12,21 @@ enum { DISPLAY_WINDOWED, DISPLAY_FULLSCREEN, DISPLAY_BORDERLESS };
 enum { FACE_POSITION, FACE_LABEL };
 enum { COMBO_LENIENT, COMBO_STRICT };  // [Controls] ComboInputWindow (runtime/hle/combowin.c)
 enum { MENU_CONFIRM_ORIGINAL, MENU_CONFIRM_SOUTH, MENU_CONFIRM_EAST };
-enum { MOUSE_LEFT, MOUSE_MIDDLE, MOUSE_RIGHT, MOUSE_X1, MOUSE_X2, MOUSE_BUTTON_COUNT };
+enum { FXAA_ORIGINAL, FXAA_311 };  // [Anti-aliasing] FXAAMode (runtime/nvn/vulkan/exec.c)
+
+// [Keybinds]: the keyboard and mouse controls (runtime/host_input.c), in the file's order. Each takes up to two keys
+// or mouse buttons: an SDL scancode, KEY_MOUSE + SDL_BUTTON_*, or the wheel's KEY_WHEEL_UP / KEY_WHEEL_DOWN (0: none).
+// BIND_ITEM_LEFT / RIGHT turn the item bar directly (runtime/hle/itembar.c), not a Switch button.
 enum {
-    KEY_DPAD_UP,
-    KEY_DPAD_UP_ALT,
-    KEY_DPAD_RIGHT,
-    KEY_DPAD_RIGHT_ALT,
-    KEY_DPAD_DOWN,
-    KEY_DPAD_DOWN_ALT,
-    KEY_DPAD_LEFT,
-    KEY_DPAD_LEFT_ALT,
-    KEY_BUTTON_B,
-    KEY_BUTTON_B_ALT,
-    KEY_BUTTON_Y,
-    KEY_BUTTON_L,
-    KEY_BUTTON_R,
-    KEY_BUTTON_ZL,
-    KEY_BUTTON_ZR,
-    KEY_BUTTON_PLUS,
-    KEY_BUTTON_PLUS_ALT,
-    KEY_BUTTON_PLUS_ALT2,
-    KEY_BUTTON_MINUS,
-    KEY_BUTTON_MINUS_ALT,
-    KEY_BUTTON_LSTICK,
-    KEY_BUTTON_A,
-    KEY_BUTTON_A_ALT,
-    KEY_BUTTON_RSTICK,
-    KEY_STICK_UP,
-    KEY_STICK_LEFT,
-    KEY_STICK_DOWN,
-    KEY_STICK_RIGHT,
-    KEY_BUTTON_X,
-    KEY_BUTTON_X_ALT,
-    KEY_BUTTON_Y_ALT,
-    KEY_BUTTON_L_ALT,
-    KEY_BUTTON_R_ALT,
-    KEY_BUTTON_ZL_ALT,
-    KEY_BUTTON_ZR_ALT,
-    KEY_BUTTON_LSTICK_ALT,
-    KEY_BUTTON_RSTICK_ALT,
-    KEY_BINDING_COUNT,
+    BIND_MOVE_UP, BIND_MOVE_DOWN, BIND_MOVE_LEFT, BIND_MOVE_RIGHT, BIND_WALK,
+    BIND_A, BIND_B, BIND_X, BIND_Y, BIND_L, BIND_R, BIND_ZL, BIND_ZR, BIND_PLUS, BIND_MINUS,
+    BIND_DPAD_UP, BIND_DPAD_DOWN, BIND_DPAD_LEFT, BIND_DPAD_RIGHT, BIND_LSTICK, BIND_RSTICK,
+    BIND_ITEM_LEFT, BIND_ITEM_RIGHT, BINDS
 };
+#define BIND_KEYS 2
+#define KEY_MOUSE 0x1000
+#define KEY_WHEEL_UP (KEY_MOUSE + 0x10)
+#define KEY_WHEEL_DOWN (KEY_MOUSE + 0x11)
 
 // [Monster HP]: factors on the HP multiplier of Hub-type quests' large monsters
 #define HP_QUESTS_MAX 256
@@ -82,12 +56,8 @@ typedef struct {
     int bonus_content;        // free downloads copied from a donor save into saves without any (runtime/services/bonus.c)
     int village_in_hub;       // L / R at the Hub's / Pub's quest counter switch to Village quests (runtime/hle/villagehub.c)
     HpScale hp;               // large monster HP in Hub-type quests (runtime/hle/hpscale.c)
-    float mouse_sensitivity;  // mouse look: degrees per mouse count, scaled by this value (host_input.c/camera_jitter.c)
-    int camera_invert_horizontal;
-    int camera_invert_vertical;
-    float camera_smoothing;   // look response interpolation: 0.05 (smooth) .. 1 (immediate)
-    int mouse_buttons[MOUSE_BUTTON_COUNT]; // Switch button index, or -1 when unbound (runtime/host_input.c)
-    int keyboard[KEY_BINDING_COUNT]; // SDL scancodes for the keyboard bindings (runtime/host_input.c)
+    float mouse_sensitivity;  // mouse look: times the hunt camera's angle per count (runtime/hle/mousecam.c), and
+                              // the speed for full right stick tilt elsewhere is divided by it (runtime/host_input.c)
     float aspect_ratio;       // the picture's shape (width / height), 0: the window's; never below 16:10 (config.c)
     float fov;                // 3D camera field of view factor (1: the game's)
     int ui_anchor;            // where the HUD goes on a picture wider than 16:9: UI_*
@@ -95,7 +65,7 @@ typedef struct {
     int volume;               // host master volume, 0..100; independent of the game's music / SFX settings
     int button_icons;         // 0: Xbox, 1: Switch, 2: PlayStation (visual guides only)
     int language;             // 0: English, 1: Spanish (host menu only)
-    int menu_scale;           // host UI text/layout scale, 100..200 percent
+    int menu_scale;           // host UI text/layout scale, 50..200 percent
     int menu_confirm;         // independent confirmation policy for the host settings menu
     int confirm_exit;         // ask before closing the application
     int fsr;                  // [Upscaler] FSR 3.1: 1 on (runtime/nvn/vulkan/fsr.c), 0 off
@@ -112,11 +82,20 @@ typedef struct {
     int combo_window;         // [Controls] ComboInputWindow: COMBO_*, how long a press waits for a second button
     char ldn_server[256];     // [Multiplayer] Server: hub server for internet hubs (host[:port]); "" the default, "Off" none
     char ldn_key[64];         // [Multiplayer] Key: matchmaking key, hubs seen only by players with the same; "" public
+    char chat_key[32];        // [Controls] ChatKey: the key that opens a line of chat (runtime/hle/chat.c), by SDL's
+                              // name for it ("/", "Y"...); "" none
+    int fxaa_mode;            // [Anti-aliasing] FXAAMode: FXAA_*, which FXAA draws while FXAA is on
+    int smooth_gradients;     // [Graphics] SmoothGradients: the game's RGBA8 render targets as RGBA16 (nvn/vulkan/textures.c)
+    int binds[BINDS][BIND_KEYS];  // [Keybinds]: BIND_* -> its keys (an SDL scancode or KEY_MOUSE + button; 0 none)
+    int menu_theme;           // [Application] Theme: THEME_*, the settings menu's colours (runtime/settings_panel.cpp)
+    int discord;              // [Discord] RichPresence: what you play, on your Discord profile (runtime/net/discord.c)
+    int discord_hunter;       // [Discord] ShowHunter: your hunter's name and HR there too (runtime/hle/presence.c)
 } Config;
 // The hub server used when ini Server is empty (runtime/net/ldn.c, server/): the project's public one (an Oracle
 // Cloud VM; a DuckDNS name, so it can move without a release). "" = no default.
 #define LDN_DEFAULT_SERVER "morerokk-mhgurecomp-ldnserver.duckdns.org"
 enum { UPDATES_ASK, UPDATES_AUTO, UPDATES_OFF };
+enum { THEME_GOLD, THEME_BLUE, THEME_HUNTER };  // [Application] Theme
 enum { UI_CENTER = 1, UI_21_9, UI_32_9, UI_EDGES };  // the middle 16:9, 21:9, 32:9, the picture's sides
 enum { FSR_UP_3, FSR_UP_4 };  // [Upscaler] Upscaler
 enum { FSR_NATIVE, FSR_QUALITY, FSR_BALANCED, FSR_PERFORMANCE, FSR_ULTRA_PERFORMANCE };  // output / render: 1, 1.5, 1.7, 2, 3
@@ -129,6 +108,7 @@ extern uint32_t g_ui_size[2];      // the game's 2D canvas size (tools/gen.py PA
 extern float g_ui_anchor_aspect;   // the HUD's width / height, 16:9 .. g_render_aspect (nvn/vulkan/exec.c)
 extern uint32_t g_fsr_output[2];   // FSR on: the size it upscales to (what g_render_size would be without it), else 0
 extern float g_fsr_lod_bias;       // FSR on: texture LOD bias for the lower render size, log2(render / output); else 0
+extern const char *g_fsr4_fallback;  // Upscaler = FSR4 but FSR 3.1 runs: why, for the settings panel (nvn/vulkan/fsr4.c); else NULL
 float camera_fovy(float fovy, float aspect);  // a 3D camera's vertical field of view for its aspect (gen.py PATCHES)
 
 void config_load(void);  // before the window and the guest start
@@ -136,7 +116,7 @@ void config_path(char *buf, size_t size);  // the settings file (MHGU_CONFIG, el
 
 // The settings of the file, one row each (config.c g_settings): what reads, writes and checks them, and what the
 // settings menu (settings_panel.cpp) marks as needing a restart. Quest<number> entries ([Monster HP]) are apart: hp.quest.
-enum { SET_BOOL, SET_INT, SET_FLOAT, SET_FACTOR, SET_CHOICE, SET_SIZE, SET_ASPECT, SET_TEXT };
+enum { SET_BOOL, SET_INT, SET_FLOAT, SET_FACTOR, SET_CHOICE, SET_SIZE, SET_ASPECT, SET_TEXT, SET_KEYS };
 typedef struct {
     const char *section, *key;  // [section] and key; "FPS|FrameRate": other spellings of the key it reads too
     int kind;                   // SET_*
@@ -158,6 +138,12 @@ bool config_valid(const ConfigSetting *s, const Config *c);
 bool config_equal(const ConfigSetting *s, const Config *a, const Config *b);
 bool config_restart_key(const char *key);  // the setting takes effect at the next start
 bool config_range(const char *key, float *min, float *max);  // a number setting's range
+bool config_help(const char *key, char *buf, size_t size);  // what the default ini's comments say of it (the menu's help)
+// [Keybinds]: a key's or mouse button's name as the file writes it and the menu shows it (SDL's, "Mouse Left"...;
+// "" for one that has none), and the code a name is for (0: none of them)
+const char *config_key_name(int code);
+int config_key_code(const char *name);
+const ConfigSetting *config_bind_setting(int bind);  // the [Keybinds] row of BIND_*
 
 // File values, before environment overrides and automatic resolution are resolved.
 void config_store_loaded(const Config *config);
@@ -178,6 +164,12 @@ int config_live_face_buttons(void);
 int config_live_menu_confirm(void);
 int config_live_background_input(void);
 int config_live_combo_window(void);
+int config_live_chat_key(void);  // [Controls] ChatKey as an SDL scancode (0: none)
+int config_live_bind(int bind, int slot);  // [Keybinds]: one of BIND_*'s keys (Config.binds)
+int config_live_fxaa_mode(void);
+int config_live_smooth_gradients(void);
+int config_live_discord(void);         // [Discord] RichPresence
+int config_live_discord_hunter(void);  // [Discord] ShowHunter
 void config_live_ldn(char *server, size_t server_size, char *key, size_t key_size);  // [Multiplayer] Server, Key
 bool config_restart_required(const Config *draft); // Raw cold fields vs this process's startup INI values.
 float config_audio_gain(void);  // atomic, safe on audio threads; 0 while muted in the background

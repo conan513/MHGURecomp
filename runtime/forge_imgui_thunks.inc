@@ -14720,9 +14720,8 @@ HLE_FUNC("igWindowRectRelToAbs", ig_igWindowRectRelToAbs) {
     c->r[0] = ret_;
 }
 
-// 1445 functions; not provided (20):
+// 1444 functions; not provided (19):
 //   ImDrawList_AddCallback (callback ImDrawCallback)
-//   ImFontGlyphRangesBuilder_BuildRanges (argument ImVector_ImWchar*)
 //   ImGuiSelectionBasicStorage_GetNextSelectedItem (argument void**)
 //   ImGuiStorage_GetVoidPtrRef (returns void**)
 //   ImGuiTextRange_split (argument ImVector_ImGuiTextRange*)
