@@ -36,14 +36,14 @@
     {                                                                                                                   \
         .display_mode = DISPLAY_BORDERLESS, .width = 1920, .height = 1080, .fps = 60, .vsync = 1, .msaa = 1, .fxaa = 1, \
         .ssao = 0, .face_buttons = FACE_POSITION, .controller_rumble = 1, .ldn_port = 39500, .sync_small_monsters = 0,  \
-        .bonus_content = 1, .village_in_hub = 1, .hp = {.scale = {1, 1, 1, 1}, .village = 2}, .mouse_sensitivity = 1.0f, \
-        .aspect_ratio = 0.0f, .fov = 1.0f, .ui_anchor = UI_CENTER, .background_input = 1, .volume = 100,                \
-        .button_icons = 0, .language = 0, .menu_scale = 100, .menu_confirm = MENU_CONFIRM_ORIGINAL, .confirm_exit = 1,  \
-        .fsr = 0, .fsr_quality = FSR_NATIVE, .fsr_sharpness = 0.8f, .fsr_objmotion = 1, .fsr_reactive = 0.9f,          \
-        .fsr_animsurf = 1, .fsr_upscaler = FSR_UP_3, .updates = UPDATES_ASK, .shader_prewarm = 1,                        \
-        .draw_distance = 1.0f, .mute_in_background = 0, .combo_window = COMBO_LENIENT, .chat_key = "/",                   \
-        .fxaa_mode = FXAA_ORIGINAL, .smooth_gradients = 0, .binds = DEFAULT_BINDS, .menu_theme = THEME_HUNTER,          \
-        .discord = 1, .discord_hunter = 1,                                                                              \
+        .bonus_content = 1, .village_in_hub = 1, .share_urgent = 0, .hp = {.scale = {1, 1, 1, 1}, .village = 2},       \
+        .mouse_sensitivity = 1.0f, .aspect_ratio = 0.0f, .fov = 1.0f, .ui_anchor = UI_CENTER, .background_input = 1,   \
+        .volume = 100, .button_icons = 0, .language = 0, .menu_scale = 100, .menu_confirm = MENU_CONFIRM_ORIGINAL,     \
+        .confirm_exit = 1, .fsr = 0, .fsr_quality = FSR_NATIVE, .fsr_sharpness = 0.8f, .fsr_objmotion = 1,             \
+        .fsr_reactive = 0.9f, .fsr_animsurf = 1, .updates = UPDATES_ASK, .shader_prewarm = 1, .draw_distance = 1.0f,  \
+        .mute_in_background = 0, .combo_window = COMBO_LENIENT, .chat_key = "/", .fxaa_mode = FXAA_ORIGINAL,           \
+        .smooth_gradients = 0, .binds = DEFAULT_BINDS, .menu_theme = THEME_HUNTER, .discord = 1, .discord_hunter = 1, \
+        .show_fps = 0,                                                                                                  \
     }
 Config g_config = CONFIG_DEFAULT_VALUES;
 Config config_defaults(void) { return (Config)CONFIG_DEFAULT_VALUES; }
@@ -55,7 +55,6 @@ uint32_t g_ui_size[2] = {1280, 720};
 float g_ui_anchor_aspect = 16.0f / 9.0f;
 uint32_t g_fsr_output[2];
 float g_fsr_lod_bias;
-const char *g_fsr4_fallback;
 
 static const char DEFAULT_INI[] =
     "; MHGU Recomp settings. Delete this file to reset to default settings, the file is regenerated.\n"
@@ -110,11 +109,6 @@ static const char DEFAULT_INI[] =
     "; Default: Off\n"
     "FSR = Off\n"
     "\n"
-    "; Which upscaler to use (FSR3 is FSR 3.1)\n"
-    "; FSR3, FSR4\n"
-    "; Default: FSR3\n"
-    "Upscaler = FSR3\n"
-    "\n"
     "; FSR quality\n"
     "; NativeAA, Quality, Balanced, Performance, UltraPerformance\n"
     "; Default: NativeAA\n"
@@ -151,6 +145,10 @@ static const char DEFAULT_INI[] =
     "SmoothGradients = Off\n"
     "\n"
     "[Performance]\n"
+    "; Show the frame rate (FPS) in a small box on the screen. Drag it with the mouse while the settings menu is open\n"
+    "; Default: Off\n"
+    "ShowFPS = Off\n"
+    "\n"
     "; Framerate cap\n"
     "; Between 30 and 240\n"
     "; Default: 60\n"
@@ -244,6 +242,7 @@ static const char DEFAULT_INI[] =
     "\n"
     "; Matchmaking key: hubs are only seen by players with the same key, so friends who all enter the same key\n"
     "; only see each other's hubs. Empty: public, your hubs are seen by (and you see) everyone without a key.\n"
+    "; On Android, empty means public among Android players only: to play with friends on PC, all enter the same key.\n"
     "; Default:\n"
     "Key =\n"
     "\n"
@@ -251,6 +250,12 @@ static const char DEFAULT_INI[] =
     "; (Currently off by default, pending a bug investigation where small monsters may refuse to attack players)\n"
     "; Default: Off\n"
     "SyncSmallMonsters = Off\n"
+    "\n"
+    "; Clearing an Urgent quest posted by someone else also counts for you, if you have unlocked it yourself. The\n"
+    "; original game only counts it for the hunter who posted it. This only changes your own save, the others in the\n"
+    "; quest have their own setting.\n"
+    "; Default: On\n"
+    "ShareUrgentCredit = On\n"
     "\n"
     "[Monster HP]\n"
     "; Playercount-specific HP multipliers for monsters in Hub quests.\n"
@@ -373,9 +378,12 @@ static int parse_factors(const char *v, float f[4]) {
 // The vertical field of view (radians) a camera of this aspect gets (tools/gen.py PATCHES: the three callers of the
 // perspective matrix that load a camera's). One made for the screen (its 16:9 aspect replaced with g_render_aspect)
 // gets the FOV factor and, on a picture narrower than 16:9 (16:10), the height that keeps 16:9's width (Vert+): more
-// above and below instead of less to the sides. Other cameras keep their own.
+// above and below instead of less to the sides. Other cameras keep their own. (A picture is a whole number of pixels:
+// a camera made from its size has an aspect within rounding of g_render_aspect, 1918x1050 for 1.828, not equal to it;
+// a small picture, 426x118 for 3.578 with FSR Ultra Performance at 1280x720, is further off, so its size counts too.)
 float camera_fovy(float fovy, float aspect) {
-    if (aspect != g_render_aspect) return fovy;
+    if (fabsf(aspect / g_render_aspect - 1.0f) > 0.005f && aspect != (float)g_render_size[0] / (float)g_render_size[1])
+        return fovy;
     fovy *= config_live_fov();
     if (aspect < 16.0f / 9.0f) fovy = 2.0f * atanf(tanf(fovy * 0.5f) * (16.0f / 9.0f) / aspect);
     return fovy;
@@ -412,7 +420,7 @@ static bool parse_aspect(const char *v, float *out) {
 #define ERR_MOUSE "Mouse smoothing must be 0.05-1."
 #define ERR_MISC "Invalid frame cap, anti-aliasing, controller, HUD or volume setting."
 #define ERR_TOGGLE "Invalid On/Off value."
-#define ERR_FSR "Invalid FSR quality, provider, sharpness or reactive mask."
+#define ERR_FSR "Invalid FSR quality, sharpness or reactive mask."
 #define ERR_NET "Invalid port or Join address list (no newlines, ';' or '#')."
 #define ERR_SERVER "Invalid hub server or matchmaking key (no newlines, ';' or '#')."
 #define ERR_HP "HP factors must be 0.05-20."
@@ -442,7 +450,6 @@ const ConfigSetting g_settings[] = {
     ON_OFF("Anti-aliasing", "FXAA", fxaa, false),
     {"Anti-aliasing", "FXAAMode", SET_CHOICE, F(fxaa_mode), 0, 0, 0, "Original,3_11", NULL, false, ERR_MISC},
     ON_OFF("Upscaler", "FSR", fsr, true),
-    {"Upscaler", "Upscaler", SET_CHOICE, F(fsr_upscaler), 0, 0, 0, "FSR3|fsr3.1|3,FSR4|4", NULL, true, ERR_FSR},
     {"Upscaler", "FSRQuality", SET_CHOICE, F(fsr_quality), 0, 0, 0,
      "NativeAA|native|aa,Quality,Balanced,Performance,UltraPerformance|ultraperf", NULL, true, ERR_FSR},
     {"Upscaler", "Sharpness", SET_FLOAT, F(fsr_sharpness), 0, 0.0f, 1.0f, NULL, NULL, true, ERR_FSR},
@@ -451,6 +458,7 @@ const ConfigSetting g_settings[] = {
     ON_OFF("Upscaler", "AnimSurf", fsr_animsurf, true),
     {"Graphics", "DrawDistance", SET_FLOAT, F(draw_distance), 0, 0.0f, 10.0f, NULL, NULL, false, ERR_DRAW},
     ON_OFF("Graphics", "SmoothGradients", smooth_gradients, false),
+    ON_OFF("Performance", "ShowFPS", show_fps, false),
     {"Performance", "FPS|FrameRate", SET_INT, F(fps), 0, 30, 240, NULL, NULL, false, ERR_MISC},
     ON_OFF("Performance", "VSync", vsync, false),
     ON_OFF("Performance", "ShaderPrewarm", shader_prewarm, true),
@@ -473,6 +481,7 @@ const ConfigSetting g_settings[] = {
     {"Multiplayer", "Server", SET_TEXT, F(ldn_server), sizeof g_config.ldn_server, 0, 0, NULL, NULL, false, ERR_SERVER},
     {"Multiplayer", "Key", SET_TEXT, F(ldn_key), sizeof g_config.ldn_key, 0, 0, NULL, NULL, false, ERR_SERVER},
     ON_OFF("Multiplayer", "SyncSmallMonsters", sync_small_monsters, true),
+    ON_OFF("Multiplayer", "ShareUrgentCredit", share_urgent, false),
     {"Monster HP", "1Player|1Players", SET_FACTOR, F(hp.scale[0]), 0, HP_SCALE_MIN, HP_SCALE_MAX, NULL, NULL, true, ERR_HP},
     {"Monster HP", "2Players|2Player", SET_FACTOR, F(hp.scale[1]), 0, HP_SCALE_MIN, HP_SCALE_MAX, NULL, NULL, true, ERR_HP},
     {"Monster HP", "3Players|3Player", SET_FACTOR, F(hp.scale[2]), 0, HP_SCALE_MIN, HP_SCALE_MAX, NULL, NULL, true, ERR_HP},
@@ -1028,7 +1037,8 @@ void config_load(void) {
     render_auto = !g_config.render_w;
     config_store_loaded(&g_config);
     const SDL_DisplayMode *dm = SDL_GetDesktopDisplayMode(SDL_GetPrimaryDisplay());
-    desktop_w = dm ? dm->w : 1920, desktop_h = dm ? dm->h : 1080;
+    // (in pixels: on a scaled Wayland desktop, SDL's size is the logical one, 1280x800 at density 2 on a 2560x1600 screen)
+    desktop_w = dm ? (int)lround(dm->w * dm->pixel_density) : 1920, desktop_h = dm ? (int)lround(dm->h * dm->pixel_density) : 1080;
     if (!g_config.width) g_config.width = desktop_w, g_config.height = desktop_h;
 
     const char *e = getenv("MHGU_WINDOW");
@@ -1051,7 +1061,6 @@ void config_load(void) {
     e = getenv("MHGU_RENDER");
     if (e && parse_size(e, &w, &h)) render_auto = false, g_config.render_w = w, g_config.render_h = h;
     if ((e = getenv("MHGU_FSR"))) g_config.fsr = atoi(e) != 0;  // (test runs: MHGU_FSR=0|1, MHGU_FSR_QUALITY=quality...)
-    if ((e = getenv("MHGU_FSR_UPSCALER"))) g_config.fsr_upscaler = !strcmp(e, "4") || !strcasecmp(e, "fsr4") ? FSR_UP_4 : FSR_UP_3;
     if ((e = getenv("MHGU_FSR_QUALITY"))) config_parse(config_setting("FSRQuality"), e, &g_config);
     if ((e = getenv("MHGU_FSR_OBJMOTION"))) g_config.fsr_objmotion = atoi(e) != 0;
     if ((e = getenv("MHGU_FSR_ANIMSURF"))) g_config.fsr_animsurf = atoi(e) != 0;
@@ -1097,8 +1106,8 @@ void config_load(void) {
         // overrides (A/B)
         g_fsr_lod_bias = log2f((float)w / (float)g_fsr_output[0]);
         if ((e = getenv("MHGU_FSR_LODBIAS"))) g_fsr_lod_bias = strtof(e, NULL);
-        LOG("[config] FSR %s %s (x%.1f): the 3D picture at %dx%d, upscaled to %ux%u, sharpness %.2f, texture LOD bias "
-            "%.2f\n", g_config.fsr_upscaler == FSR_UP_4 ? "4 (3.1 if it cannot start)" : "3.1", names[g_config.fsr_quality], r, w, h, g_fsr_output[0], g_fsr_output[1], g_config.fsr_sharpness,
+        LOG("[config] FSR 3.1 %s (x%.1f): the 3D picture at %dx%d, upscaled to %ux%u, sharpness %.2f, texture LOD bias "
+            "%.2f\n", names[g_config.fsr_quality], r, w, h, g_fsr_output[0], g_fsr_output[1], g_config.fsr_sharpness,
             g_fsr_lod_bias);
     }
     g_config.render_w = w, g_config.render_h = h;
