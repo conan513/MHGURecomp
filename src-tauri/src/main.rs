@@ -114,13 +114,6 @@ const FIELDS: &[Field] = &[
     },
     Field {
         section: "Upscaler",
-        key: "Upscaler",
-        id: "fsrUpscaler",
-        default: "FSR3",
-        kind: FieldKind::Select(&["FSR3", "FSR4"]),
-    },
-    Field {
-        section: "Upscaler",
         key: "FSRQuality",
         id: "fsrQuality",
         default: "NativeAA",
@@ -171,6 +164,13 @@ const FIELDS: &[Field] = &[
         section: "Graphics",
         key: "SmoothGradients",
         id: "smoothGradients",
+        default: "Off",
+        kind: FieldKind::Toggle,
+    },
+    Field {
+        section: "Performance",
+        key: "ShowFPS",
+        id: "showFps",
         default: "Off",
         kind: FieldKind::Toggle,
     },
@@ -346,7 +346,7 @@ const FIELDS: &[Field] = &[
         section: "Keybinds",
         key: "R",
         id: "bindR",
-        default: "Right Shift",
+        default: "Left Shift",
         kind: FieldKind::Key,
     },
     Field {
@@ -473,6 +473,13 @@ const FIELDS: &[Field] = &[
         key: "SyncSmallMonsters",
         id: "syncSmallMonsters",
         default: "Off",
+        kind: FieldKind::Toggle,
+    },
+    Field {
+        section: "Multiplayer",
+        key: "ShareUrgentCredit",
+        id: "shareUrgentCredit",
+        default: "On",
         kind: FieldKind::Toggle,
     },
     Field {
@@ -813,7 +820,7 @@ fn is_previous_conflicting_default(key: &str, value: &str) -> bool {
         "a" => &["F, Return"][..],
         "x" => &["G, H"][..],
         "walk" => &["Left Shift"][..],
-        "r" => &["Left Shift, Right Shift"][..],
+        "r" => &["Right Shift", "Left Shift, Right Shift"][..],
         "leftstickclick" => &["Left Ctrl, Left Alt"][..],
         "rightstickclick" => &["Left Alt, Right Ctrl", "Right Ctrl, Right Alt"][..],
         _ => return false,
@@ -1285,6 +1292,7 @@ fn is_deprecated_ini_entry(section: &str, key: &str) -> bool {
         "controller" => ["FaceButtons", "BackgroundInput", "Rumble"]
             .iter()
             .any(|candidate| key == normalize(candidate)),
+        "upscaler" => key == normalize("Upscaler"),
         _ => false,
     }
 }
@@ -1361,6 +1369,10 @@ fn save_settings(directory: &Path, settings: &Value) -> Result<(), String> {
                 .get(&current_address)
                 .and_then(|value| truncate_previous_key_binding(value))
                 .is_some();
+        let replaces_previous_conflicting_default = field.section == "Keybinds"
+            && existing
+                .get(&current_address)
+                .is_some_and(|value| is_previous_conflicting_default(field.key, value));
         let needs_legacy_migration = ((field.section == "Controls"
             && !existing.contains_key(&current_address)
             && existing.contains_key(&address("Controller", field.key)))
@@ -1368,7 +1380,8 @@ fn save_settings(directory: &Path, settings: &Value) -> Result<(), String> {
                 && !existing.contains_key(&current_address)
                 && migrate_legacy_binding(&existing, field.key).is_some()))
             || upgrades_previous_upstream_default
-            || truncates_previous_key_binding;
+            || truncates_previous_key_binding
+            || replaces_previous_conflicting_default;
         if current_settings.get(field.id).and_then(Value::as_str) != Some(value)
             || needs_legacy_migration
         {
@@ -1649,6 +1662,8 @@ mod tests {
             "matchmakingKey",
             "discordRichPresence",
             "discordShowHunter",
+            "showFps",
+            "shareUrgentCredit",
             "confirmExit",
             "language",
             "menuTheme",
@@ -1658,6 +1673,9 @@ mod tests {
             assert!(settings.get(id).is_some(), "missing launcher setting: {id}");
         }
         assert_eq!(settings["confirmExit"], "On");
+        assert_eq!(settings["showFps"], "Off");
+        assert_eq!(settings["shareUrgentCredit"], "On");
+        assert!(settings.get("fsrUpscaler").is_none());
         assert!(validate_settings(&settings).is_empty());
 
         let mut settings = settings;
@@ -1756,7 +1774,6 @@ mod tests {
         let directory = temp_directory();
         let mut settings = default_settings();
         settings["fsr"] = json!("On");
-        settings["fsrUpscaler"] = json!("FSR4");
         settings["fsrQuality"] = json!("Balanced");
         settings["fsrSharpness"] = json!("0.5");
         settings["fsrObjectMotion"] = json!("Off");
@@ -1768,7 +1785,7 @@ mod tests {
         let output = fs::read_to_string(ini_path(&directory)).expect("read updated ini");
         assert!(output.contains("[Upscaler]"));
         assert!(output.contains("FSR = On"));
-        assert!(output.contains("Upscaler = FSR4"));
+        assert!(!output.contains("Upscaler ="));
         assert!(output.contains("FSRQuality = Balanced"));
         assert!(output.contains("Sharpness = 0.5"));
         assert!(output.contains("ObjectMotion = Off"));
@@ -1776,7 +1793,7 @@ mod tests {
         assert!(output.contains("AnimSurf = Off"));
         let loaded = read_settings(&directory).expect("reload settings");
         assert_eq!(loaded["fsr"], "On");
-        assert_eq!(loaded["fsrUpscaler"], "FSR4");
+        assert!(loaded.get("fsrUpscaler").is_none());
         assert_eq!(loaded["fsrQuality"], "Balanced");
         assert_eq!(loaded["fsrSharpness"], "0.5");
         assert_eq!(loaded["fsrObjectMotion"], "Off");
@@ -1785,9 +1802,46 @@ mod tests {
 
         settings["fsrSharpness"] = json!("1.1");
         assert!(validate_settings(&settings).contains_key("fsrSharpness"));
-        settings["fsrSharpness"] = json!("0.5");
-        settings["fsrUpscaler"] = json!("FSR5");
-        assert!(validate_settings(&settings).contains_key("fsrUpscaler"));
+        fs::remove_dir_all(directory).expect("clean temp directory");
+    }
+
+    #[test]
+    fn retired_fsr4_selector_is_removed_when_saving() {
+        let directory = temp_directory();
+        fs::write(
+            ini_path(&directory),
+            "[Upscaler]\nFSR = On\nUpscaler = FSR4\nFSRQuality = Balanced\n",
+        )
+        .expect("write previous FSR4 settings");
+
+        let settings = read_settings(&directory).expect("load previous settings");
+        assert_eq!(settings["fsr"], "On");
+        assert_eq!(settings["fsrQuality"], "Balanced");
+        assert!(settings.get("fsrUpscaler").is_none());
+        save_settings(&directory, &settings).expect("remove retired upscaler setting");
+
+        let output = fs::read_to_string(ini_path(&directory)).expect("read updated ini");
+        assert!(output.contains("FSR = On"));
+        assert!(output.contains("FSRQuality = Balanced"));
+        assert!(!output.contains("Upscaler = FSR4"));
+        fs::remove_dir_all(directory).expect("clean temp directory");
+    }
+
+    #[test]
+    fn new_runtime_toggles_are_saved() {
+        let directory = temp_directory();
+        let mut settings = default_settings();
+        settings["showFps"] = json!("On");
+        settings["shareUrgentCredit"] = json!("Off");
+        assert!(validate_settings(&settings).is_empty());
+
+        save_settings(&directory, &settings).expect("save new runtime settings");
+        let output = fs::read_to_string(ini_path(&directory)).expect("read updated ini");
+        assert!(output.contains("ShowFPS = On"));
+        assert!(output.contains("ShareUrgentCredit = Off"));
+        let loaded = read_settings(&directory).expect("reload settings");
+        assert_eq!(loaded["showFps"], "On");
+        assert_eq!(loaded["shareUrgentCredit"], "Off");
         fs::remove_dir_all(directory).expect("clean temp directory");
     }
 
@@ -2030,7 +2084,7 @@ mod tests {
         assert_eq!(settings["bindB"], "Space, Backspace");
         assert_eq!(settings["bindX"], "G, H, Mouse Left");
         assert_eq!(settings["bindY"], "E, T");
-        assert_eq!(settings["bindR"], "Right Shift");
+        assert_eq!(settings["bindR"], "Left Shift");
         assert_eq!(settings["bindDpadUp"], "1, Up");
 
         save_settings(&directory, &settings).expect("save upgraded keybind defaults");
@@ -2052,6 +2106,10 @@ mod tests {
             let value = settings[field.id].as_str().expect("keybind default");
             for key in value.split(',').map(str::trim) {
                 let normalized = key.to_ascii_lowercase();
+                assert!(
+                    !matches!(normalized.as_str(), "right ctrl" | "right alt" | "right shift"),
+                    "right-side modifier must not be a default binding: {key}"
+                );
                 assert!(
                     assigned.insert(normalized, field.id).is_none(),
                     "default keybind collision in {}: {key}",
@@ -2076,7 +2134,7 @@ mod tests {
         assert_eq!(settings["bindX"], "G, H, Mouse Left");
         assert_eq!(settings["bindWalk"], "CapsLock");
         assert_eq!(settings["bindLeftStickClick"], "Left Ctrl");
-        assert_eq!(settings["bindR"], "Right Shift");
+        assert_eq!(settings["bindR"], "Left Shift");
         assert_eq!(settings["bindRightStickClick"], "Left Alt");
         assert!(validate_settings(&settings).is_empty());
 
@@ -2086,8 +2144,24 @@ mod tests {
         assert!(output.contains("X = G, H, Mouse Left"));
         assert!(output.contains("Walk = CapsLock"));
         assert!(output.contains("LeftStickClick = Left Ctrl"));
-        assert!(output.contains("R = Right Shift"));
+        assert!(output.contains("R = Left Shift"));
         assert!(output.contains("RightStickClick = Left Alt"));
+        fs::remove_dir_all(directory).expect("clean temp directory");
+    }
+
+    #[test]
+    fn previous_right_shift_default_moves_to_left_shift() {
+        let directory = temp_directory();
+        fs::write(ini_path(&directory), "[Keybinds]\nR = Right Shift\n")
+            .expect("write previous R default");
+
+        let settings = read_settings(&directory).expect("migrate previous R default");
+        assert_eq!(settings["bindR"], "Left Shift");
+        assert!(validate_settings(&settings).is_empty());
+
+        save_settings(&directory, &settings).expect("save updated R default");
+        let output = fs::read_to_string(ini_path(&directory)).expect("read updated keybind");
+        assert!(output.contains("R = Left Shift"));
         fs::remove_dir_all(directory).expect("clean temp directory");
     }
 

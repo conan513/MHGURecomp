@@ -53,6 +53,11 @@ int main(int argc, char **argv) {
                 for (int other = i; other < BINDS; other++)
                     for (int k = other == i ? j + 1 : 0; k < BIND_KEYS; k++)
                         assert(defaults.binds[i][j] != defaults.binds[other][k]);
+    for (int i = 0; i < BINDS; i++)
+        for (int j = 0; j < BIND_KEYS; j++)
+            assert(defaults.binds[i][j] != SDL_SCANCODE_RCTRL &&
+                   defaults.binds[i][j] != SDL_SCANCODE_RALT &&
+                   defaults.binds[i][j] != SDL_SCANCODE_RSHIFT);
     assert(config_parse(config_setting("SSAO"), "On", &defaults) && defaults.ssao);
     assert(config_parse(config_setting("Rumble"), "Off", &defaults) && !defaults.controller_rumble);
     set_env("MHGU_SSAO", "1");
@@ -61,7 +66,7 @@ int main(int argc, char **argv) {
     assert(c.ssao && !c.controller_rumble);
     assert(c.binds[BIND_A][0] == SDL_SCANCODE_RETURN);
     assert(c.binds[BIND_WALK][0] == SDL_SCANCODE_CAPSLOCK);
-    assert(c.binds[BIND_R][0] == SDL_SCANCODE_RSHIFT && !c.binds[BIND_R][1]);
+    assert(c.binds[BIND_R][0] == SDL_SCANCODE_LSHIFT && !c.binds[BIND_R][1]);
     assert(c.binds[BIND_LSTICK][0] == SDL_SCANCODE_LCTRL && !c.binds[BIND_LSTICK][1]);
     assert(c.binds[BIND_RSTICK][0] == SDL_SCANCODE_LALT && !c.binds[BIND_RSTICK][1]);
     assert(c.width == 0 && c.height == 0 && c.render_w == 0 && c.render_h == 0);

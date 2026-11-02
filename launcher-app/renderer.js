@@ -83,14 +83,17 @@ const controlIslands = [
 const categoryFields = {
   display: ['mode', 'resolution', 'renderResolution', 'aspectRatio', 'fov', 'uiAnchor'],
   graphics: [
-    'msaa', 'fxaa', 'fxaaMode', 'ssao', 'fsr', 'fsrUpscaler', 'fsrQuality', 'fsrSharpness',
+    'msaa', 'fxaa', 'fxaaMode', 'ssao', 'fsr', 'fsrQuality', 'fsrSharpness',
     'fsrObjectMotion', 'fsrReactive', 'fsrAnimSurf', 'drawDistance', 'smoothGradients',
-    'fps', 'vsync', 'shaderPrewarm',
+    'showFps', 'fps', 'vsync', 'shaderPrewarm',
   ],
   controller: ['faceButtons', 'menuConfirm', 'buttonIcons', 'backgroundInput', 'rumble', 'comboInputWindow'],
   audio: ['volume', 'muteInBackground'],
   keyboardMouse: [],
-  multiplayer: ['hubServer', 'port', 'join', 'matchmakingKey', 'syncSmallMonsters', 'discordRichPresence', 'discordShowHunter'],
+  multiplayer: [
+    'hubServer', 'port', 'join', 'matchmakingKey', 'syncSmallMonsters', 'shareUrgentCredit',
+    'discordRichPresence', 'discordShowHunter',
+  ],
   gameplay: ['villageQuestsInHub', 'hubHp', 'bonusContent', 'hp1', 'hp2', 'hp3', 'hp4', 'quests'],
   application: ['language', 'menuTheme', 'menuScale', 'confirmExit', 'updates'],
 };
@@ -142,9 +145,8 @@ const fieldInfo = {
   fxaaMode: { label: 'FXAA mode', kind: 'select', options: ['Original', { label: '3.11', value: '3_11' }] },
   ssao: { label: 'SSAO', kind: 'toggle', help: 'Experimental depth-aware contact shadows, including around skybox edges. Needs scene depth, so flat 2D loading screens are unaffected; may reduce performance.' },
   smoothGradients: { label: 'Smooth gradients', kind: 'toggle', help: 'Uses higher-precision color for dark skies and soft glows; may cost GPU time.' },
-  fsr: { label: 'FSR', kind: 'toggle', help: 'Temporal upscaling. Renders the 3D scene at a lower resolution and reconstructs it at the output resolution; the HUD stays full resolution. MSAA and FXAA are disabled while FSR is active.' },
-  fsrUpscaler: { label: 'Upscaler', kind: 'select', options: [{ label: 'FSR 3.1', value: 'FSR3' }, { label: 'FSR 4', value: 'FSR4' }], help: 'FSR 4 requires a supported RDNA 4 GPU and compatible AMD driver on Windows. FSR 3.1 is used if FSR 4 cannot start.' },
-  fsrQuality: { label: 'FSR quality', kind: 'select', options: ['NativeAA', 'Quality', 'Balanced', 'Performance', 'UltraPerformance'], help: 'Higher quality renders closer to the output resolution; Performance modes render faster but look softer.' },
+  fsr: { label: 'FSR 3.1', kind: 'toggle', help: 'AMD FidelityFX Super Resolution 3.1 temporal upscaling. Renders the 3D scene at a lower resolution and reconstructs it at the output resolution; the HUD stays full resolution. MSAA and FXAA are disabled while FSR is active.' },
+  fsrQuality: { label: 'FSR 3.1 quality', kind: 'select', options: ['NativeAA', 'Quality', 'Balanced', 'Performance', 'UltraPerformance'], help: 'Higher quality renders closer to the output resolution; Performance modes render faster but look softer.' },
   fsrSharpness: { label: 'FSR sharpness', kind: 'number', min: 0, max: 1, step: 0.05, help: 'Sharpening strength, from off to strongest.' },
   fsrObjectMotion: { label: 'Object motion vectors', kind: 'toggle', help: 'Tracks moving characters and monsters to reduce temporal ghosting. Can be disabled if it causes issues.' },
   fsrReactive: { label: 'Reactive mask strength', kind: 'number', min: 0, max: 1, step: 0.05, help: 'Helps preserve detail on moving objects; set to 0 to disable.' },
@@ -168,6 +170,7 @@ const fieldInfo = {
     suffix: 'FPS',
   },
   vsync: { label: 'VSync', kind: 'toggle', help: 'Synchronize frames with your display refresh.' },
+  showFps: { label: 'FPS counter', kind: 'toggle', help: 'Show a draggable frame-rate counter while playing.' },
   shaderPrewarm: { label: 'Shader prewarm', kind: 'toggle', help: 'Translate game shaders in the background at startup to reduce first-use stutter. Initial startup takes longer and uses additional shader cache space.' },
   faceButtons: {
     label: 'Face button mapping',
@@ -259,6 +262,7 @@ const fieldInfo = {
   port: { label: 'Multiplayer port', kind: 'number', min: 1, max: 65535 },
   join: { label: 'Remote hosts', kind: 'text', help: 'Comma-separated addresses of players to join.' },
   syncSmallMonsters: { label: 'Synchronize small monsters', kind: 'toggle', help: 'Keep small monster state synchronized in multiplayer.' },
+  shareUrgentCredit: { label: 'Share Urgent quest credit', kind: 'toggle', help: 'Clearing another hunter’s Urgent quest also counts for you if you have unlocked it. Only your own save is changed.' },
   villageQuestsInHub: { label: 'Village quests at the Hub', kind: 'toggle' },
   hubHp: { label: 'Village quest HP multiplier', kind: 'number', min: 0.05, max: 20, step: 0.05 },
   bonusContent: { label: 'Copy bonus content', kind: 'toggle', help: 'Copy bonus content from a donor save.' },

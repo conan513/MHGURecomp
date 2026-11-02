@@ -1110,10 +1110,10 @@ std::vector<Row> main_rows() {
         if (c.draw_distance == 0)
             r.back().value = tr("No limit");
         add_bool(r, "smooth", "Smooth gradients", &c.smooth_gradients, ini("SmoothGradients"));
-        add_bool(r, "fsr", "FSR", &c.fsr, ini("FSR"));
+        add_bool(r, "fsr", "FSR 3.1", &c.fsr, ini("FSR"));
         if (c.fsr) {
             add_choice(
-                r, "fsr.quality", "FSR quality", c.fsr_quality,
+                r, "fsr.quality", "FSR 3.1 quality", c.fsr_quality,
                 {tr("Native AA"), tr("Quality"), tr("Balanced"), tr("Performance"), tr("Ultra performance")},
                 [](int v) { s.draft.fsr_quality = v; }, ini("FSRQuality"));
             number(r, "fsr.sharpness", tr("Sharpness"), &c.fsr_sharpness, lo("Sharpness"), hi("Sharpness"), .05f, ini("Sharpness"));

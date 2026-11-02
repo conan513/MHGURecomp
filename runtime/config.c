@@ -22,7 +22,7 @@
 #define DEFAULT_BINDS {{SDL_SCANCODE_W}, {SDL_SCANCODE_S}, {SDL_SCANCODE_A}, {SDL_SCANCODE_D}, {SDL_SCANCODE_CAPSLOCK}, \
     {SDL_SCANCODE_F, SDL_SCANCODE_RETURN, KEY_MOUSE + SDL_BUTTON_RIGHT}, {SDL_SCANCODE_SPACE, SDL_SCANCODE_BACKSPACE}, \
     {SDL_SCANCODE_G, SDL_SCANCODE_H, KEY_MOUSE + SDL_BUTTON_LEFT}, {SDL_SCANCODE_E, SDL_SCANCODE_T},                  \
-    {SDL_SCANCODE_Q, SDL_SCANCODE_U}, {SDL_SCANCODE_RSHIFT}, {SDL_SCANCODE_TAB, SDL_SCANCODE_Z},                 \
+    {SDL_SCANCODE_Q, SDL_SCANCODE_U}, {SDL_SCANCODE_LSHIFT}, {SDL_SCANCODE_TAB, SDL_SCANCODE_Z},                 \
     {SDL_SCANCODE_R, SDL_SCANCODE_B}, {SDL_SCANCODE_KP_ENTER}, {SDL_SCANCODE_C, SDL_SCANCODE_V},                     \
     {SDL_SCANCODE_1, SDL_SCANCODE_UP}, {SDL_SCANCODE_3, SDL_SCANCODE_DOWN}, {SDL_SCANCODE_4, SDL_SCANCODE_LEFT},     \
     {SDL_SCANCODE_2, SDL_SCANCODE_RIGHT}, {SDL_SCANCODE_LCTRL}, {SDL_SCANCODE_LALT}, {KEY_WHEEL_UP}, {KEY_WHEEL_DOWN}}
@@ -210,7 +210,7 @@ static const char DEFAULT_INI[] =
     "X = G, H, Mouse Left\n"
     "Y = E, T\n"
     "L = Q, U\n"
-    "R = Right Shift\n"
+    "R = Left Shift\n"
     "ZL = Tab, Z\n"
     "ZR = R, B\n"
     "Plus = Keypad Enter\n"
@@ -933,7 +933,8 @@ static bool uses_previous_conflicting_default(int bind) {
     if (bind == BIND_LSTICK)
         return g_config.binds[bind][0] == SDL_SCANCODE_LCTRL && g_config.binds[bind][1] == SDL_SCANCODE_LALT;
     if (bind == BIND_R)
-        return g_config.binds[bind][0] == SDL_SCANCODE_LSHIFT && g_config.binds[bind][1] == SDL_SCANCODE_RSHIFT;
+        return (g_config.binds[bind][0] == SDL_SCANCODE_LSHIFT && g_config.binds[bind][1] == SDL_SCANCODE_RSHIFT) ||
+               (g_config.binds[bind][0] == SDL_SCANCODE_RSHIFT && !g_config.binds[bind][1]);
     if (bind == BIND_RSTICK)
         return (g_config.binds[bind][0] == SDL_SCANCODE_RCTRL && g_config.binds[bind][1] == SDL_SCANCODE_RALT) ||
                (g_config.binds[bind][0] == SDL_SCANCODE_LALT && g_config.binds[bind][1] == SDL_SCANCODE_RCTRL);
