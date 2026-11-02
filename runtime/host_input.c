@@ -1,8 +1,8 @@
 // Host controls -> the Switch controller the game reads (runtime/hle/input.c).
 //
 // Keyboard and mouse: the keys and mouse buttons of the settings' [Keybinds] (runtime/config.c; by default WASD left
-//   stick, Left Shift held: half tilt, walking; F / Return / right click = A, Space / Backspace = B,
-//   G / H / left click = X, E / T = Y, Q / U = L, Left / Right Shift = R, Tab / Z = ZL, R / B = ZR,
+//   stick, Left Shift held: half tilt, walking; F / Return = A, Space / Backspace = B,
+//   G / H = X, E / T = Y, Q / U = L, Left / Right Shift = R, Tab / Z = ZL, R / B = ZR,
 //   Keypad Enter = Plus, C / V = Minus, 1..4 and arrows = d-pad, Ctrl / Alt = stick clicks), mouse movement the
 //   camera (in a hunt its angles directly, elsewhere the right stick; click in the window to capture the mouse,
 //   Esc releases it), wheel up / down = item bar left / right (ItemLeft / ItemRight: in a hunt, one item per press or

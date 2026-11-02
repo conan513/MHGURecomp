@@ -122,28 +122,28 @@ Keyboard and mouse support (not recommended). The default keys:
 
 | Key | Switch button |
 | --- | --- |
-| W A S D | left stick (hold Left Shift to walk) |
+| W A S D | left stick (hold CapsLock to walk) |
 | Mouse | camera |
-| Left click / G or H | X |
-| Right click / F or Return | A |
+| G / H / Mouse Left | X |
+| F / Return / Mouse Right | A |
 | Space / Backspace | B |
 | E / T | Y |
 | Q / U | L |
-| Left Shift / Right Shift | R (Left Shift also walks) |
+| Right Shift | R |
 | Tab / Z | ZL |
 | R / B | ZR |
 | Mouse wheel | item bar: up = the item to the left, down = to the right (in a hunt, no need to hold L) |
 | Keypad Enter | Plus |
 | C / V | Minus |
 | 1 / 2 / 3 / 4 and arrow keys | d-pad up / right / down / left |
-| Left Ctrl / Left Alt | left stick click |
-| Left Alt / Right Ctrl | right stick click |
+| Left Ctrl | left stick click |
+| Left Alt | right stick click |
 
-Change them in Settings (F1), Controls, Keybinds: select a button, then Set key and press a key, click a mouse
-button (away from the menu's buttons) or turn the wheel, or Add another key (each takes up to four). Item left /
+Change them in Settings (F1), Controls, Keybinds: select a button, then Set binding and press a key, click a mouse
+button (away from the menu's buttons) or turn the wheel, or Add another binding (each takes up to three). Item left /
 Item right turn the item bar one item per press (by default the wheel; any key works too). The wheel on any other
 button is a short press of it. They are kept in the ini's `[Keybinds]` section (`B = Space, Backspace`,
-`Plus = Keypad Enter`, `A = F, Return, Mouse Right`, `X = G, H, Mouse Left`, `ItemLeft = Wheel Up`; key names as the menu shows them,
+`Plus = Keypad Enter`, `A = F, Return`, `X = G, H`, `ItemLeft = Wheel Up`; key names as the menu shows them,
 `None` for none). A key that does
 something else too shows red. Escape, Insert, F1 and F7 to F12 are the recomp's own and can't be used.
 

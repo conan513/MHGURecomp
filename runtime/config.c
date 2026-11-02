@@ -19,14 +19,13 @@
 
 #include "keymap.h"
 
-#define DEFAULT_BINDS {{SDL_SCANCODE_W}, {SDL_SCANCODE_S}, {SDL_SCANCODE_A}, {SDL_SCANCODE_D}, {SDL_SCANCODE_LSHIFT}, \
+#define DEFAULT_BINDS {{SDL_SCANCODE_W}, {SDL_SCANCODE_S}, {SDL_SCANCODE_A}, {SDL_SCANCODE_D}, {SDL_SCANCODE_CAPSLOCK}, \
     {SDL_SCANCODE_F, SDL_SCANCODE_RETURN, KEY_MOUSE + SDL_BUTTON_RIGHT}, {SDL_SCANCODE_SPACE, SDL_SCANCODE_BACKSPACE}, \
     {SDL_SCANCODE_G, SDL_SCANCODE_H, KEY_MOUSE + SDL_BUTTON_LEFT}, {SDL_SCANCODE_E, SDL_SCANCODE_T},                  \
-    {SDL_SCANCODE_Q, SDL_SCANCODE_U}, {SDL_SCANCODE_LSHIFT, SDL_SCANCODE_RSHIFT}, {SDL_SCANCODE_TAB, SDL_SCANCODE_Z}, \
+    {SDL_SCANCODE_Q, SDL_SCANCODE_U}, {SDL_SCANCODE_RSHIFT}, {SDL_SCANCODE_TAB, SDL_SCANCODE_Z},                 \
     {SDL_SCANCODE_R, SDL_SCANCODE_B}, {SDL_SCANCODE_KP_ENTER}, {SDL_SCANCODE_C, SDL_SCANCODE_V},                     \
     {SDL_SCANCODE_1, SDL_SCANCODE_UP}, {SDL_SCANCODE_3, SDL_SCANCODE_DOWN}, {SDL_SCANCODE_4, SDL_SCANCODE_LEFT},     \
-    {SDL_SCANCODE_2, SDL_SCANCODE_RIGHT}, {SDL_SCANCODE_LCTRL, SDL_SCANCODE_LALT},                                   \
-    {SDL_SCANCODE_LALT, SDL_SCANCODE_RCTRL}, {KEY_WHEEL_UP}, {KEY_WHEEL_DOWN}}
+    {SDL_SCANCODE_2, SDL_SCANCODE_RIGHT}, {SDL_SCANCODE_LCTRL}, {SDL_SCANCODE_LALT}, {KEY_WHEEL_UP}, {KEY_WHEEL_DOWN}}
 #define PREVIOUS_UPSTREAM_BINDS {{SDL_SCANCODE_W}, {SDL_SCANCODE_S}, {SDL_SCANCODE_A}, {SDL_SCANCODE_D}, {SDL_SCANCODE_LSHIFT}, \
     {KEY_MOUSE + SDL_BUTTON_RIGHT}, {SDL_SCANCODE_SPACE}, {KEY_MOUSE + SDL_BUTTON_LEFT},                             \
     {SDL_SCANCODE_R, KEY_MOUSE + SDL_BUTTON_MIDDLE}, {SDL_SCANCODE_Q}, {SDL_SCANCODE_E}, {SDL_SCANCODE_TAB},        \
@@ -39,7 +38,7 @@
         .ssao = 0, .face_buttons = FACE_POSITION, .controller_rumble = 1, .ldn_port = 39500, .sync_small_monsters = 0,  \
         .bonus_content = 1, .village_in_hub = 1, .hp = {.scale = {1, 1, 1, 1}, .village = 2}, .mouse_sensitivity = 1.0f, \
         .aspect_ratio = 0.0f, .fov = 1.0f, .ui_anchor = UI_CENTER, .background_input = 1, .volume = 100,                \
-        .button_icons = 0, .language = 0, .menu_scale = 100, .menu_confirm = MENU_CONFIRM_ORIGINAL, .confirm_exit = 0,  \
+        .button_icons = 0, .language = 0, .menu_scale = 100, .menu_confirm = MENU_CONFIRM_ORIGINAL, .confirm_exit = 1,  \
         .fsr = 0, .fsr_quality = FSR_NATIVE, .fsr_sharpness = 0.8f, .fsr_objmotion = 1, .fsr_reactive = 0.9f,          \
         .fsr_animsurf = 1, .fsr_upscaler = FSR_UP_3, .updates = UPDATES_ASK, .shader_prewarm = 1,                        \
         .draw_distance = 1.0f, .mute_in_background = 0, .combo_window = COMBO_LENIENT, .chat_key = "/",                   \
@@ -92,6 +91,10 @@ static const char DEFAULT_INI[] =
     "; Off, 2x, 4x, 8x\n"
     "; Default: Off\n"
     "MSAA = Off\n"
+    "\n"
+    "; Experimental depth-aware contact shadows\n"
+    "; Default: Off\n"
+    "SSAO = Off\n"
     "\n"
     "; GU's default FXAA\n"
     "; Default: On\n"
@@ -196,20 +199,20 @@ static const char DEFAULT_INI[] =
     "[Keybinds]\n"
     "; The keys or mouse buttons for each Switch button, for moving (the left stick) and for turning the item bar\n"
     "; (ItemLeft / ItemRight: one item per press, in a hunt, without holding L).\n"
-    "; Up to four each, separated by a comma, or None.\n"
+    "; Up to three each, separated by a comma, or None. The third input can be used for a mouse button.\n"
     "; Mouse buttons: Mouse Left, Mouse Right, Mouse Middle, Mouse 4, Mouse 5, Wheel Up, Wheel Down.\n"
     "; Esc, Insert, F1 and F7 to F12 are the recomp's own keys.\n"
     "MoveUp = W\n"
     "MoveDown = S\n"
     "MoveLeft = A\n"
     "MoveRight = D\n"
-    "Walk = Left Shift\n"
+    "Walk = CapsLock\n"
     "A = F, Return, Mouse Right\n"
     "B = Space, Backspace\n"
     "X = G, H, Mouse Left\n"
     "Y = E, T\n"
     "L = Q, U\n"
-    "R = Left Shift, Right Shift\n"
+    "R = Right Shift\n"
     "ZL = Tab, Z\n"
     "ZR = R, B\n"
     "Plus = Keypad Enter\n"
@@ -218,8 +221,8 @@ static const char DEFAULT_INI[] =
     "DpadDown = 3, Down\n"
     "DpadLeft = 4, Left\n"
     "DpadRight = 2, Right\n"
-    "LeftStickClick = Left Ctrl, Left Alt\n"
-    "RightStickClick = Left Alt, Right Ctrl\n"
+    "LeftStickClick = Left Ctrl\n"
+    "RightStickClick = Left Alt\n"
     "ItemLeft = Wheel Up\n"
     "ItemRight = Wheel Down\n"
     "\n"
@@ -435,6 +438,7 @@ const ConfigSetting g_settings[] = {
     {"Display", "UIAnchor", SET_CHOICE, F(ui_anchor), 0, 0, 0, "Center|1|16:9,21:9|2,32:9|3,Edges", anchor_values, true,
      ERR_MISC},
     {"Anti-aliasing", "MSAA", SET_CHOICE, F(msaa), 0, 0, 0, "Off|none|0|1|1x,2x|2,4x|4,8x|8", msaa_values, false, ERR_MISC},
+    ON_OFF("Anti-aliasing", "SSAO", ssao, false),
     ON_OFF("Anti-aliasing", "FXAA", fxaa, false),
     {"Anti-aliasing", "FXAAMode", SET_CHOICE, F(fxaa_mode), 0, 0, 0, "Original,3_11", NULL, false, ERR_MISC},
     ON_OFF("Upscaler", "FSR", fsr, true),
@@ -908,6 +912,24 @@ static bool set_legacy_binding(Config *legacy, bool seen[BINDS], const char *sec
 static bool uses_previous_upstream_default(int bind) {
     return !memcmp(g_config.binds[bind], previous_upstream_binds[bind], sizeof g_config.binds[bind]);
 }
+static bool uses_previous_conflicting_default(int bind) {
+    if (bind == BIND_A)
+        return g_config.binds[bind][0] == SDL_SCANCODE_F &&
+               g_config.binds[bind][1] == SDL_SCANCODE_RETURN && !g_config.binds[bind][2];
+    if (bind == BIND_X)
+        return g_config.binds[bind][0] == SDL_SCANCODE_G &&
+               g_config.binds[bind][1] == SDL_SCANCODE_H && !g_config.binds[bind][2];
+    if (bind == BIND_WALK)
+        return g_config.binds[bind][0] == SDL_SCANCODE_LSHIFT && !g_config.binds[bind][1];
+    if (bind == BIND_LSTICK)
+        return g_config.binds[bind][0] == SDL_SCANCODE_LCTRL && g_config.binds[bind][1] == SDL_SCANCODE_LALT;
+    if (bind == BIND_R)
+        return g_config.binds[bind][0] == SDL_SCANCODE_LSHIFT && g_config.binds[bind][1] == SDL_SCANCODE_RSHIFT;
+    if (bind == BIND_RSTICK)
+        return (g_config.binds[bind][0] == SDL_SCANCODE_RCTRL && g_config.binds[bind][1] == SDL_SCANCODE_RALT) ||
+               (g_config.binds[bind][0] == SDL_SCANCODE_LALT && g_config.binds[bind][1] == SDL_SCANCODE_RCTRL);
+    return false;
+}
 
 static char *trim(char *s) {
     while (isspace((unsigned char)*s)) s++;
@@ -993,7 +1015,8 @@ void config_load(void) {
             if (legacy_seen[i] && (!current_seen[i] || uses_previous_upstream_default(i))) {
                 memcpy(g_config.binds[i], legacy.binds[i], sizeof g_config.binds[i]);
                 migrated_legacy = true;
-            } else if (current_seen[i] && uses_previous_upstream_default(i)) {
+            } else if (current_seen[i] &&
+                       (uses_previous_upstream_default(i) || uses_previous_conflicting_default(i))) {
                 memcpy(g_config.binds[i], defaults.binds[i], sizeof g_config.binds[i]);
             }
         }

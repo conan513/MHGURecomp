@@ -26,6 +26,8 @@ enum FieldKind {
     AspectRatio,
     Multiplier(f64, f64),
     Key,
+    ChatKey,
+    MatchmakingKey,
     Resolution,
     RenderResolution,
     HubServer,
@@ -88,6 +90,13 @@ const FIELDS: &[Field] = &[
         id: "fxaa",
         default: "On",
         kind: FieldKind::Toggle,
+    },
+    Field {
+        section: "Anti-aliasing",
+        key: "FXAAMode",
+        id: "fxaaMode",
+        default: "Original",
+        kind: FieldKind::Select(&["Original", "3_11"]),
     },
     Field {
         section: "Anti-aliasing",
@@ -159,6 +168,13 @@ const FIELDS: &[Field] = &[
         kind: FieldKind::Decimal(0.0, 10.0),
     },
     Field {
+        section: "Graphics",
+        key: "SmoothGradients",
+        id: "smoothGradients",
+        default: "Off",
+        kind: FieldKind::Toggle,
+    },
+    Field {
         section: "Performance",
         key: "FPS",
         id: "fps",
@@ -188,6 +204,20 @@ const FIELDS: &[Field] = &[
     },
     Field {
         section: "Controls",
+        key: "MenuConfirm",
+        id: "menuConfirm",
+        default: "Original",
+        kind: FieldKind::Select(&["Original", "South", "East"]),
+    },
+    Field {
+        section: "Application",
+        key: "ButtonIcons",
+        id: "buttonIcons",
+        default: "Xbox",
+        kind: FieldKind::Select(&["Xbox", "Switch", "PlayStation"]),
+    },
+    Field {
+        section: "Controls",
         key: "BackgroundInput",
         id: "backgroundInput",
         default: "On",
@@ -208,10 +238,38 @@ const FIELDS: &[Field] = &[
         kind: FieldKind::Select(&["Lenient", "Strict"]),
     },
     Field {
+        section: "Controls",
+        key: "ChatKey",
+        id: "chatKey",
+        default: "/",
+        kind: FieldKind::ChatKey,
+    },
+    Field {
+        section: "Audio",
+        key: "Volume",
+        id: "volume",
+        default: "100",
+        kind: FieldKind::Integer(0.0, 100.0),
+    },
+    Field {
         section: "Audio",
         key: "MuteInBackground",
         id: "muteInBackground",
         default: "Off",
+        kind: FieldKind::Toggle,
+    },
+    Field {
+        section: "Discord",
+        key: "RichPresence",
+        id: "discordRichPresence",
+        default: "On",
+        kind: FieldKind::Toggle,
+    },
+    Field {
+        section: "Discord",
+        key: "ShowHunter",
+        id: "discordShowHunter",
+        default: "On",
         kind: FieldKind::Toggle,
     },
     Field {
@@ -246,7 +304,7 @@ const FIELDS: &[Field] = &[
         section: "Keybinds",
         key: "Walk",
         id: "bindWalk",
-        default: "Left Shift",
+        default: "CapsLock",
         kind: FieldKind::Key,
     },
     Field {
@@ -288,7 +346,7 @@ const FIELDS: &[Field] = &[
         section: "Keybinds",
         key: "R",
         id: "bindR",
-        default: "Left Shift, Right Shift",
+        default: "Right Shift",
         kind: FieldKind::Key,
     },
     Field {
@@ -351,14 +409,14 @@ const FIELDS: &[Field] = &[
         section: "Keybinds",
         key: "LeftStickClick",
         id: "bindLeftStickClick",
-        default: "Left Ctrl, Left Alt",
+        default: "Left Ctrl",
         kind: FieldKind::Key,
     },
     Field {
         section: "Keybinds",
         key: "RightStickClick",
         id: "bindRightStickClick",
-        default: "Left Alt, Right Ctrl",
+        default: "Left Alt",
         kind: FieldKind::Key,
     },
     Field {
@@ -405,6 +463,13 @@ const FIELDS: &[Field] = &[
     },
     Field {
         section: "Multiplayer",
+        key: "Key",
+        id: "matchmakingKey",
+        default: "",
+        kind: FieldKind::MatchmakingKey,
+    },
+    Field {
+        section: "Multiplayer",
         key: "SyncSmallMonsters",
         id: "syncSmallMonsters",
         default: "Off",
@@ -430,6 +495,41 @@ const FIELDS: &[Field] = &[
         id: "bonusContent",
         default: "On",
         kind: FieldKind::Toggle,
+    },
+    Field {
+        section: "Application",
+        key: "ConfirmExit",
+        id: "confirmExit",
+        default: "On",
+        kind: FieldKind::Toggle,
+    },
+    Field {
+        section: "Application",
+        key: "Language",
+        id: "language",
+        default: "English",
+        kind: FieldKind::Select(&["English", "Spanish"]),
+    },
+    Field {
+        section: "Application",
+        key: "Theme",
+        id: "menuTheme",
+        default: "Hunter",
+        kind: FieldKind::Select(&["Gold", "Blue", "Hunter"]),
+    },
+    Field {
+        section: "Application",
+        key: "MenuScale",
+        id: "menuScale",
+        default: "100",
+        kind: FieldKind::Integer(50.0, 200.0),
+    },
+    Field {
+        section: "Application",
+        key: "Updates",
+        id: "updates",
+        default: "Ask",
+        kind: FieldKind::Select(&["Ask", "Auto", "Off"]),
     },
     Field {
         section: "Monster HP",
@@ -460,7 +560,8 @@ const FIELDS: &[Field] = &[
         kind: FieldKind::Multiplier(0.05, 20.0),
     },
 ];
-const MAX_BIND_KEYS: usize = 4;
+const MAX_BIND_KEYS: usize = 3;
+const PREVIOUS_MAX_BIND_KEYS: usize = 4;
 
 const CANONICAL_SECTIONS: &[&str] = &[
     "Display",
@@ -475,7 +576,9 @@ const CANONICAL_SECTIONS: &[&str] = &[
     "Audio",
     "Monster HP",
     "Village Quests",
+    "Discord",
     "Bonus Content",
+    "Application",
 ];
 
 #[derive(Serialize)]
@@ -651,6 +754,30 @@ fn migrate_legacy_binding(values: &HashMap<String, String>, key: &str) -> Option
     })
 }
 
+fn truncate_previous_key_binding(value: &str) -> Option<String> {
+    let keys = value.split(',').map(str::trim).collect::<Vec<_>>();
+    if keys.len() <= MAX_BIND_KEYS || !valid_key_binding_with_limit(value, PREVIOUS_MAX_BIND_KEYS) {
+        return None;
+    }
+    let mut retained = keys.iter().take(2).copied().collect::<Vec<_>>();
+    if let Some(mouse) = keys
+        .iter()
+        .skip(2)
+        .find(|key| is_mouse_binding(key))
+    {
+        retained.push(*mouse);
+    } else {
+        retained.push(keys[2]);
+    }
+    Some(retained.join(", "))
+}
+
+fn is_mouse_binding(value: &str) -> bool {
+    ["Mouse Left", "Mouse Right", "Mouse Middle", "Mouse 4", "Mouse 5"]
+        .iter()
+        .any(|key| value.eq_ignore_ascii_case(key))
+}
+
 fn is_previous_upstream_default(key: &str, value: &str) -> bool {
     let default = match normalize(key).as_str() {
         "moveup" => "W",
@@ -681,6 +808,21 @@ fn is_previous_upstream_default(key: &str, value: &str) -> bool {
     normalize(default) == normalize(value)
 }
 
+fn is_previous_conflicting_default(key: &str, value: &str) -> bool {
+    let previous_defaults = match normalize(key).as_str() {
+        "a" => &["F, Return"][..],
+        "x" => &["G, H"][..],
+        "walk" => &["Left Shift"][..],
+        "r" => &["Left Shift, Right Shift"][..],
+        "leftstickclick" => &["Left Ctrl, Left Alt"][..],
+        "rightstickclick" => &["Left Alt, Right Ctrl", "Right Ctrl, Right Alt"][..],
+        _ => return false,
+    };
+    previous_defaults
+        .iter()
+        .any(|default| normalize(default) == normalize(value))
+}
+
 fn read_settings(directory: &Path) -> Result<Value, String> {
     let ini = ini_path(directory);
     let content = match fs::read_to_string(&ini) {
@@ -701,6 +843,12 @@ fn read_settings(directory: &Path) -> Result<Value, String> {
         let legacy_address = (field.section == "Controls")
             .then(|| address("Controller", field.key));
         if field.section == "Keybinds"
+            && current_value.is_some_and(|value| is_previous_conflicting_default(field.key, value))
+        {
+            settings.insert(field.id.to_string(), json!(field.default));
+            continue;
+        }
+        if field.section == "Keybinds"
             && current_value.map_or(true, |value| is_previous_upstream_default(field.key, value))
         {
             if let Some(value) = migrate_legacy_binding(&values, field.key) {
@@ -716,6 +864,11 @@ fn read_settings(directory: &Path) -> Result<Value, String> {
         if let Some(value) = current_value.or_else(|| {
             legacy_address.as_ref().and_then(|key| values.get(key))
         }) {
+            let value = if field.section == "Keybinds" {
+                truncate_previous_key_binding(value).unwrap_or_else(|| value.clone())
+            } else {
+                value.clone()
+            };
             settings.insert(field.id.to_string(), json!(value));
         }
     }
@@ -853,11 +1006,32 @@ fn valid_keyboard_key(value: &str) -> bool {
 }
 
 fn valid_key_binding(value: &str) -> bool {
+    valid_key_binding_with_limit(value, MAX_BIND_KEYS)
+}
+
+fn valid_chat_key(value: &str) -> bool {
+    if value.is_empty() {
+        return true;
+    }
+    value.len() < 32
+        && !value.contains(['\r', '\n', ';', '#'])
+        && !matches!(
+            value.to_ascii_lowercase().as_str(),
+            "escape" | "esc" | "insert" | "f1" | "f7" | "f8" | "f9" | "f10" | "f11" | "f12"
+        )
+        && valid_keyboard_key(value)
+}
+
+fn valid_matchmaking_key(value: &str) -> bool {
+    value.len() < 64 && !value.contains(['\r', '\n', ';', '#'])
+}
+
+fn valid_key_binding_with_limit(value: &str, max_keys: usize) -> bool {
     if value.contains(['\r', '\n', ';', '#']) {
         return false;
     }
     let keys = value.split(',').map(str::trim).collect::<Vec<_>>();
-    if keys.is_empty() || keys.len() > MAX_BIND_KEYS || keys.iter().any(|key| key.is_empty()) {
+    if keys.is_empty() || keys.len() > max_keys || keys.iter().any(|key| key.is_empty()) {
         return false;
     }
     if keys.len() == 1 && keys[0].eq_ignore_ascii_case("none") {
@@ -907,9 +1081,14 @@ fn validate_settings(settings: &Value) -> HashMap<String, String> {
                 .then(|| "AspectRatio must be Auto or a ratio from 0.5 to 10.".to_string()),
             FieldKind::Key => (!valid_key_binding(value)).then(|| {
                 format!(
-                    "{} must contain up to four supported keys or mouse buttons.",
+                    "{} must contain up to three supported keys or mouse buttons.",
                     field.key
                 )
+            }),
+            FieldKind::ChatKey => (!valid_chat_key(value))
+                .then(|| "ChatKey must be one supported keyboard key or None.".to_string()),
+            FieldKind::MatchmakingKey => (!valid_matchmaking_key(value)).then(|| {
+                "Key must be under 64 bytes and must not contain newlines, ';' or '#'.".to_string()
             }),
             FieldKind::Resolution | FieldKind::RenderResolution => {
                 let special = match field.kind {
@@ -940,7 +1119,7 @@ fn validate_settings(settings: &Value) -> HashMap<String, String> {
                     "Hub server must be under 256 bytes and must not contain newlines, ';' or '#'."
                         .to_string()
                 }),
-            FieldKind::Text => (value.len() >= 256 || value.contains(['\r', '\n']))
+            FieldKind::Text => (value.len() >= 256 || value.contains(['\r', '\n', ';', '#']))
                 .then(|| format!("{} must be under 256 bytes and fit on one line.", field.key)),
         };
         if let Some(error) = error {
@@ -1177,13 +1356,19 @@ fn save_settings(directory: &Path, settings: &Value) -> Result<(), String> {
                 .is_some_and(|value| is_previous_upstream_default(field.key, value))
             && (migrate_legacy_binding(&existing, field.key).is_some()
                 || existing.get(&current_address).is_some_and(|value| value != field.default));
+        let truncates_previous_key_binding = field.section == "Keybinds"
+            && existing
+                .get(&current_address)
+                .and_then(|value| truncate_previous_key_binding(value))
+                .is_some();
         let needs_legacy_migration = ((field.section == "Controls"
             && !existing.contains_key(&current_address)
             && existing.contains_key(&address("Controller", field.key)))
             || (field.section == "Keybinds"
                 && !existing.contains_key(&current_address)
                 && migrate_legacy_binding(&existing, field.key).is_some()))
-            || upgrades_previous_upstream_default;
+            || upgrades_previous_upstream_default
+            || truncates_previous_key_binding;
         if current_settings.get(field.id).and_then(Value::as_str) != Some(value)
             || needs_legacy_migration
         {
@@ -1429,6 +1614,66 @@ mod tests {
         assert!(output.contains("Quest8 = 1.2"));
         assert!(output.contains("Quest9 = 2.0"));
         fs::remove_dir_all(directory).expect("clean temp directory");
+    }
+
+    #[test]
+    fn keybinds_from_four_key_launcher_version_keep_an_extra_binding() {
+        let directory = temp_directory();
+        fs::write(
+            ini_path(&directory),
+            "[Keybinds]\nA = J, K, L, Mouse Middle\n",
+        )
+        .expect("write previous keybind format");
+
+        let settings = read_settings(&directory).expect("load previous keybind format");
+        assert_eq!(settings["bindA"], "J, K, Mouse Middle");
+        assert!(validate_settings(&settings).is_empty());
+
+        save_settings(&directory, &settings).expect("save three-binding format");
+        let output = fs::read_to_string(ini_path(&directory)).expect("read three-binding format");
+        assert!(output.contains("A = J, K, Mouse Middle"));
+        fs::remove_dir_all(directory).expect("clean temp directory");
+    }
+
+    #[test]
+    fn launcher_exposes_runtime_settings_and_validates_chat_key() {
+        let settings = default_settings();
+        for id in [
+            "ssao",
+            "fxaaMode",
+            "smoothGradients",
+            "menuConfirm",
+            "buttonIcons",
+            "chatKey",
+            "volume",
+            "matchmakingKey",
+            "discordRichPresence",
+            "discordShowHunter",
+            "confirmExit",
+            "language",
+            "menuTheme",
+            "menuScale",
+            "updates",
+        ] {
+            assert!(settings.get(id).is_some(), "missing launcher setting: {id}");
+        }
+        assert_eq!(settings["confirmExit"], "On");
+        assert!(validate_settings(&settings).is_empty());
+
+        let mut settings = settings;
+        settings["chatKey"] = json!("Comma");
+        assert!(validate_settings(&settings).is_empty());
+        settings["chatKey"] = json!("Mouse Left");
+        assert!(validate_settings(&settings).contains_key("chatKey"));
+        settings["chatKey"] = json!("F12");
+        assert!(validate_settings(&settings).contains_key("chatKey"));
+        settings["chatKey"] = json!("");
+        assert!(validate_settings(&settings).is_empty());
+        settings["matchmakingKey"] = json!("x".repeat(64));
+        assert!(validate_settings(&settings).contains_key("matchmakingKey"));
+        settings["matchmakingKey"] = json!("friends");
+        settings["join"] = json!("host#comment");
+        assert!(validate_settings(&settings).contains_key("join"));
     }
 
     #[test]
@@ -1785,7 +2030,7 @@ mod tests {
         assert_eq!(settings["bindB"], "Space, Backspace");
         assert_eq!(settings["bindX"], "G, H, Mouse Left");
         assert_eq!(settings["bindY"], "E, T");
-        assert_eq!(settings["bindR"], "Left Shift, Right Shift");
+        assert_eq!(settings["bindR"], "Right Shift");
         assert_eq!(settings["bindDpadUp"], "1, Up");
 
         save_settings(&directory, &settings).expect("save upgraded keybind defaults");
@@ -1798,10 +2043,59 @@ mod tests {
     }
 
     #[test]
-    fn keybinds_accept_four_keys_mouse_buttons_and_wheel() {
+    fn default_keybinds_do_not_share_inputs() {
+        let settings = default_settings();
+        assert_eq!(settings["bindA"], "F, Return, Mouse Right");
+        assert_eq!(settings["bindX"], "G, H, Mouse Left");
+        let mut assigned = HashMap::new();
+        for field in FIELDS.iter().filter(|field| field.id.starts_with("bind")) {
+            let value = settings[field.id].as_str().expect("keybind default");
+            for key in value.split(',').map(str::trim) {
+                let normalized = key.to_ascii_lowercase();
+                assert!(
+                    assigned.insert(normalized, field.id).is_none(),
+                    "default keybind collision in {}: {key}",
+                    field.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn previous_overlapping_keybind_defaults_are_migrated() {
+        let directory = temp_directory();
+        fs::write(
+            ini_path(&directory),
+            "[Keybinds]\nA = F, Return\nX = G, H\nWalk = Left Shift\nR = Left Shift, Right Shift\n\
+             LeftStickClick = Left Ctrl, Left Alt\nRightStickClick = Left Alt, Right Ctrl\n",
+        )
+        .expect("write previous keybind defaults");
+
+        let settings = read_settings(&directory).expect("migrate overlapping keybind defaults");
+        assert_eq!(settings["bindA"], "F, Return, Mouse Right");
+        assert_eq!(settings["bindX"], "G, H, Mouse Left");
+        assert_eq!(settings["bindWalk"], "CapsLock");
+        assert_eq!(settings["bindLeftStickClick"], "Left Ctrl");
+        assert_eq!(settings["bindR"], "Right Shift");
+        assert_eq!(settings["bindRightStickClick"], "Left Alt");
+        assert!(validate_settings(&settings).is_empty());
+
+        save_settings(&directory, &settings).expect("save migrated keybind defaults");
+        let output = fs::read_to_string(ini_path(&directory)).expect("read migrated keybinds");
+        assert!(output.contains("A = F, Return, Mouse Right"));
+        assert!(output.contains("X = G, H, Mouse Left"));
+        assert!(output.contains("Walk = CapsLock"));
+        assert!(output.contains("LeftStickClick = Left Ctrl"));
+        assert!(output.contains("R = Right Shift"));
+        assert!(output.contains("RightStickClick = Left Alt"));
+        fs::remove_dir_all(directory).expect("clean temp directory");
+    }
+
+    #[test]
+    fn keybinds_accept_two_keys_mouse_buttons_and_wheel() {
         let directory = temp_directory();
         let mut settings = default_settings();
-        settings["bindA"] = json!("J, Mouse 4, K, Mouse Middle");
+        settings["bindA"] = json!("J, Mouse 4");
         settings["bindY"] = json!("K, Mouse Middle");
         settings["bindDpadUp"] = json!("I");
         settings["bindItemLeft"] = json!("Wheel Down");
@@ -1809,17 +2103,19 @@ mod tests {
         save_settings(&directory, &settings).expect("save keybinds");
 
         let output = fs::read_to_string(ini_path(&directory)).expect("read updated ini");
-        assert!(output.contains("[Keybinds]\nA = J, Mouse 4, K, Mouse Middle"));
+        assert!(output.contains("[Keybinds]\nA = J, Mouse 4"));
         assert!(output.contains("Y = K, Mouse Middle"));
         assert!(output.contains("DpadUp = I"));
         assert!(output.contains("ItemLeft = Wheel Down"));
         let loaded = read_settings(&directory).expect("reload settings");
-        assert_eq!(loaded["bindA"], "J, Mouse 4, K, Mouse Middle");
+        assert_eq!(loaded["bindA"], "J, Mouse 4");
         assert_eq!(loaded["bindY"], "K, Mouse Middle");
         assert_eq!(loaded["bindDpadUp"], "I");
         assert_eq!(loaded["bindItemLeft"], "Wheel Down");
 
         settings["bindDpadUp"] = json!("not-a-key");
+        assert!(validate_settings(&settings).contains_key("bindDpadUp"));
+        settings["bindDpadUp"] = json!("J, K, L");
         assert!(validate_settings(&settings).contains_key("bindDpadUp"));
         settings["bindDpadUp"] = json!("None");
         assert!(validate_settings(&settings).is_empty());

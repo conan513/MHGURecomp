@@ -20,6 +20,7 @@ const categories = [
   { id: 'keyboardMouse', title: 'Keyboard/Mouse', icon: '⌘' },
   { id: 'multiplayer', title: 'Multiplayer', icon: '◎' },
   { id: 'gameplay', title: 'Gameplay', icon: '⚔' },
+  { id: 'application', title: 'Application', icon: '⚙' },
 ];
 
 const movementBindings = [
@@ -53,6 +54,7 @@ const controlIslands = [
   },
   {
     title: 'Keybinds',
+    layout: 'keybindings',
     groups: [
       {
         title: 'Movement',
@@ -70,6 +72,10 @@ const controlIslands = [
         title: 'Stick clicks',
         fields: stickBindings.map(([id]) => id),
       },
+      {
+        title: 'Chat',
+        fields: ['chatKey'],
+      },
     ],
   },
 ];
@@ -77,14 +83,16 @@ const controlIslands = [
 const categoryFields = {
   display: ['mode', 'resolution', 'renderResolution', 'aspectRatio', 'fov', 'uiAnchor'],
   graphics: [
-    'msaa', 'fxaa', 'ssao', 'fsr', 'fsrUpscaler', 'fsrQuality', 'fsrSharpness',
-    'fsrObjectMotion', 'fsrReactive', 'fsrAnimSurf', 'drawDistance', 'fps', 'vsync', 'shaderPrewarm',
+    'msaa', 'fxaa', 'fxaaMode', 'ssao', 'fsr', 'fsrUpscaler', 'fsrQuality', 'fsrSharpness',
+    'fsrObjectMotion', 'fsrReactive', 'fsrAnimSurf', 'drawDistance', 'smoothGradients',
+    'fps', 'vsync', 'shaderPrewarm',
   ],
-  controller: ['faceButtons', 'backgroundInput', 'rumble', 'comboInputWindow'],
-  audio: ['muteInBackground'],
+  controller: ['faceButtons', 'menuConfirm', 'buttonIcons', 'backgroundInput', 'rumble', 'comboInputWindow'],
+  audio: ['volume', 'muteInBackground'],
   keyboardMouse: [],
-  multiplayer: ['hubServer', 'port', 'join', 'syncSmallMonsters'],
+  multiplayer: ['hubServer', 'port', 'join', 'matchmakingKey', 'syncSmallMonsters', 'discordRichPresence', 'discordShowHunter'],
   gameplay: ['villageQuestsInHub', 'hubHp', 'bonusContent', 'hp1', 'hp2', 'hp3', 'hp4', 'quests'],
+  application: ['language', 'menuTheme', 'menuScale', 'confirmExit', 'updates'],
 };
 
 const fieldInfo = {
@@ -120,7 +128,7 @@ const fieldInfo = {
     customType: 'number',
     min: 0.5,
     max: 2,
-    step: 0.1,
+    step: 0.05,
     help: '1.0 uses the game default.',
   },
   uiAnchor: {
@@ -131,21 +139,22 @@ const fieldInfo = {
   },
   msaa: { label: 'MSAA', kind: 'select', options: ['Off', '2x', '4x', '8x'], help: 'Multisample anti-aliasing.' },
   fxaa: { label: 'FXAA', kind: 'toggle', help: 'A lightweight post-processing anti-aliasing pass.' },
+  fxaaMode: { label: 'FXAA mode', kind: 'select', options: ['Original', { label: '3.11', value: '3_11' }] },
   ssao: { label: 'SSAO', kind: 'toggle', help: 'Experimental depth-aware contact shadows, including around skybox edges. Needs scene depth, so flat 2D loading screens are unaffected; may reduce performance.' },
+  smoothGradients: { label: 'Smooth gradients', kind: 'toggle', help: 'Uses higher-precision color for dark skies and soft glows; may cost GPU time.' },
   fsr: { label: 'FSR', kind: 'toggle', help: 'Temporal upscaling. Renders the 3D scene at a lower resolution and reconstructs it at the output resolution; the HUD stays full resolution. MSAA and FXAA are disabled while FSR is active.' },
   fsrUpscaler: { label: 'Upscaler', kind: 'select', options: [{ label: 'FSR 3.1', value: 'FSR3' }, { label: 'FSR 4', value: 'FSR4' }], help: 'FSR 4 requires a supported RDNA 4 GPU and compatible AMD driver on Windows. FSR 3.1 is used if FSR 4 cannot start.' },
   fsrQuality: { label: 'FSR quality', kind: 'select', options: ['NativeAA', 'Quality', 'Balanced', 'Performance', 'UltraPerformance'], help: 'Higher quality renders closer to the output resolution; Performance modes render faster but look softer.' },
-  fsrSharpness: { label: 'FSR sharpness', kind: 'number', min: 0, max: 1, step: 0.1, help: 'Sharpening strength, from off to strongest.' },
+  fsrSharpness: { label: 'FSR sharpness', kind: 'number', min: 0, max: 1, step: 0.05, help: 'Sharpening strength, from off to strongest.' },
   fsrObjectMotion: { label: 'Object motion vectors', kind: 'toggle', help: 'Tracks moving characters and monsters to reduce temporal ghosting. Can be disabled if it causes issues.' },
-  fsrReactive: { label: 'Reactive mask strength', kind: 'number', min: 0, max: 1, step: 0.1, help: 'Helps preserve detail on moving objects; set to 0 to disable.' },
+  fsrReactive: { label: 'Reactive mask strength', kind: 'number', min: 0, max: 1, step: 0.05, help: 'Helps preserve detail on moving objects; set to 0 to disable.' },
   fsrAnimSurf: { label: 'Animated surface detection', kind: 'toggle', help: 'Detects texture-animated surfaces such as water to reduce ghosting.' },
   drawDistance: {
     label: 'Draw distance',
-    kind: 'select',
-    options: [
-      { label: '0 (No limit)', value: '0' },
-      ...Array.from({ length: 10 }, (_, index) => String(index + 1)),
-    ],
+    kind: 'number',
+    min: 0,
+    max: 10,
+    step: 0.25,
     help: 'Controls how far away people in villages and Hubs are drawn. 1 is the game default; 0 means no limit.',
   },
   fps: {
@@ -169,6 +178,21 @@ const fieldInfo = {
     ],
     help: 'Switch layout: the bottom button acts as B and the right button as A, whatever is printed on them. Match printed labels: an Xbox A button acts as A.',
   },
+  menuConfirm: {
+    label: 'Settings-menu confirm button',
+    kind: 'select',
+    options: [
+      { label: 'Original', value: 'Original' },
+      { label: 'Bottom button', value: 'South' },
+      { label: 'Right button', value: 'East' },
+    ],
+    help: 'Changes confirmation only in the recomp settings menu.',
+  },
+  buttonIcons: {
+    label: 'Button icons',
+    kind: 'select',
+    options: ['Xbox', 'Switch', 'PlayStation'],
+  },
   backgroundInput: {
     label: 'Controller works in background',
     kind: 'toggle',
@@ -190,6 +214,23 @@ const fieldInfo = {
     kind: 'toggle',
     help: 'Mute game audio while its window is not focused.',
   },
+  volume: { label: 'Master volume (%)', kind: 'number', min: 0, max: 100, help: 'Host audio volume, independent of the game audio settings.' },
+  chatKey: {
+    label: 'Chat key',
+    kind: 'chatKey',
+    help: 'Click, then press one keyboard key. Press Delete to clear; Escape cancels.',
+  },
+  discordRichPresence: { label: 'Discord Rich Presence', kind: 'toggle' },
+  discordShowHunter: { label: 'Show hunter name and HR', kind: 'toggle' },
+  language: {
+    label: 'Menu language',
+    kind: 'select',
+    options: [{ label: 'English', value: 'English' }, { label: 'Spanish', value: 'Spanish' }],
+  },
+  menuTheme: { label: 'Menu theme', kind: 'select', options: ['Gold', 'Blue', 'Hunter'] },
+  menuScale: { label: 'Interface scale (%)', kind: 'number', min: 50, max: 200, step: 10 },
+  confirmExit: { label: 'Confirm exit', kind: 'toggle' },
+  updates: { label: 'Updates', kind: 'select', options: ['Ask', 'Auto', 'Off'] },
   mouseSensitivity: {
     label: 'Mouse sensitivity',
     kind: 'preset',
@@ -197,11 +238,11 @@ const fieldInfo = {
     customType: 'number',
     min: 0.1,
     max: 10,
-    step: 0.1,
+    step: 0.05,
     help: 'In a hunt, mouse movement directly turns the camera; elsewhere it controls the right stick. Click in the game window to capture the mouse.',
   },
-  bindItemLeft: { label: 'Turn item bar left', kind: 'key', help: 'Assign up to four keys, mouse buttons, or the mouse wheel.' },
-  bindItemRight: { label: 'Turn item bar right', kind: 'key', help: 'Assign up to four keys, mouse buttons, or the mouse wheel.' },
+  bindItemLeft: { label: 'Turn item bar left', kind: 'key', help: 'Assign up to three keys, mouse buttons, or mouse-wheel directions.' },
+  bindItemRight: { label: 'Turn item bar right', kind: 'key', help: 'Assign up to three keys, mouse buttons, or mouse-wheel directions.' },
   hubServer: {
     label: 'Hub server address',
     kind: 'text',
@@ -209,23 +250,29 @@ const fieldInfo = {
     maxLength: 255,
     help: 'Leave blank to use the default server, or enter Off to disable internet hubs.',
   },
+  matchmakingKey: {
+    label: 'Matchmaking key',
+    kind: 'text',
+    maxLength: 63,
+    help: 'Players using a different key will not see your hubs. Leave blank for public hubs.',
+  },
   port: { label: 'Multiplayer port', kind: 'number', min: 1, max: 65535 },
   join: { label: 'Remote hosts', kind: 'text', help: 'Comma-separated addresses of players to join.' },
   syncSmallMonsters: { label: 'Synchronize small monsters', kind: 'toggle', help: 'Keep small monster state synchronized in multiplayer.' },
   villageQuestsInHub: { label: 'Village quests at the Hub', kind: 'toggle' },
-  hubHp: { label: 'Village quest HP multiplier', kind: 'number', min: 0.05, max: 20 },
+  hubHp: { label: 'Village quest HP multiplier', kind: 'number', min: 0.05, max: 20, step: 0.05 },
   bonusContent: { label: 'Copy bonus content', kind: 'toggle', help: 'Copy bonus content from a donor save.' },
-  hp1: { label: '1 hunter', kind: 'number', min: 0.05, max: 20 },
-  hp2: { label: '2 hunters', kind: 'number', min: 0.05, max: 20 },
-  hp3: { label: '3 hunters', kind: 'number', min: 0.05, max: 20 },
-  hp4: { label: '4 hunters', kind: 'number', min: 0.05, max: 20 },
+  hp1: { label: '1 hunter', kind: 'number', min: 0.05, max: 20, step: 0.05 },
+  hp2: { label: '2 hunters', kind: 'number', min: 0.05, max: 20, step: 0.05 },
+  hp3: { label: '3 hunters', kind: 'number', min: 0.05, max: 20, step: 0.05 },
+  hp4: { label: '4 hunters', kind: 'number', min: 0.05, max: 20, step: 0.05 },
   quests: { label: 'Per-quest HP multipliers', kind: 'quests', help: 'One multiplier or four comma-separated player-count values per quest. Example: Quest123 = 1.0, 1.2, 1.5, 2.0' },
 };
 for (const [id, label] of [...movementBindings, ...buttonBindings, ...dpadBindings, ...stickBindings]) {
   fieldInfo[id] = {
     label,
     kind: 'key',
-    help: 'Click, then press up to four keys, mouse buttons, or mouse-wheel directions.',
+    help: 'Click, then press up to three keys, mouse buttons, or mouse-wheel directions.',
   };
 }
 
@@ -240,7 +287,6 @@ let activeCategory = 'display';
 let isDirty = false;
 let toastTimer = null;
 let listeningForBinding = null;
-let capturedBindings = [];
 let capturedMouseTarget = null;
 
 function makeElement(tag, className, text) {
@@ -306,21 +352,46 @@ function createNav() {
 
 function createField(id) {
   const info = fieldInfo[id];
-  const label = makeElement('label', `field-card${id === 'quests' ? ' wide' : ''}`);
-  label.htmlFor = `setting-${id}`;
+  const label = makeElement(info.kind === 'key' ? 'div' : 'label', `field-card${id === 'quests' ? ' wide' : ''}${info.kind === 'key' ? ' binding-row' : ''}`);
+  if (info.kind !== 'key') label.htmlFor = `setting-${id}`;
   label.append(makeElement('span', 'field-label', info.label));
   let control;
   if (info.kind === 'key') {
+    control = makeElement('div', 'binding-slots');
+    control.dataset.controlKind = 'keyBindings';
+    control.dataset.setting = id;
+    for (let slot = 0; slot < 3; slot++) {
+      const button = makeElement('button', 'field-control key-binding');
+      button.type = 'button';
+      button.dataset.bindingSetting = id;
+      button.dataset.bindingSlot = String(slot);
+      button.addEventListener('click', () => {
+        if (listeningForBinding && listeningForBinding !== button) {
+          listeningForBinding.textContent = listeningForBinding.dataset.boundKey ?? 'None';
+        }
+        if (listeningForBinding === button) {
+          listeningForBinding = null;
+          button.textContent = button.dataset.boundKey ?? 'None';
+        } else {
+          listeningForBinding = button;
+          button.textContent = 'Press a key…';
+        }
+      });
+      control.append(button);
+    }
+  } else if (info.kind === 'chatKey') {
     control = makeElement('button', 'field-control key-binding', 'Press to assign');
     control.type = 'button';
     control.addEventListener('click', () => {
+      if (listeningForBinding && listeningForBinding !== control) {
+        listeningForBinding.textContent = listeningForBinding.dataset.boundKey ?? 'None';
+      }
       if (listeningForBinding === control) {
         listeningForBinding = null;
         control.textContent = control.dataset.boundKey ?? '';
       } else {
         listeningForBinding = control;
-        capturedBindings = [];
-        control.textContent = 'Press up to four inputs…';
+        control.textContent = 'Press one key…';
       }
     });
   } else if (info.kind === 'select' || info.kind === 'toggle') {
@@ -376,21 +447,41 @@ function createField(id) {
   control.addEventListener('input', () => setDirty(true));
   control.addEventListener('change', () => setDirty(true));
   label.append(control);
-  if (info.suffix || info.min !== undefined) {
-    const range = info.suffix
-      ? `${info.min}–${info.max} ${info.suffix}`
-      : `${info.min}–${info.max}`;
-    label.append(makeElement('span', 'field-help', info.help ?? range));
-  } else if (info.help) {
-    label.append(makeElement('span', 'field-help', info.help));
+  if (info.kind !== 'key') {
+    if (info.suffix || info.min !== undefined) {
+      const range = info.suffix
+        ? `${info.min}–${info.max} ${info.suffix}`
+        : `${info.min}–${info.max}`;
+      label.append(makeElement('span', 'field-help', info.help ?? range));
+    } else if (info.help) {
+      label.append(makeElement('span', 'field-help', info.help));
+    }
   }
   return label;
 }
 
-function createControlIsland(title, fieldIds, groups = null) {
+function createControlIsland(title, fieldIds, groups = null, layout = null) {
   const island = makeElement('section', 'control-island');
   island.append(makeElement('h3', 'control-island-title', title));
   if (groups) {
+    if (layout === 'keybindings') {
+      const table = makeElement('div', 'keybindings-table');
+      table.append(makeElement('p', 'binding-hint', 'Assign up to two keys plus one extra key, mouse button, or mouse-wheel direction.'));
+      const headings = makeElement('div', 'binding-columns');
+      headings.append(
+        makeElement('span', 'binding-column-heading', 'Action'),
+        makeElement('span', 'binding-column-heading', 'Primary'),
+        makeElement('span', 'binding-column-heading', 'Alternate'),
+        makeElement('span', 'binding-column-heading', 'Extra'),
+      );
+      table.append(headings);
+      for (const group of groups) {
+        table.append(makeElement('h5', 'binding-group-title', group.title));
+        for (const id of group.fields) table.append(createField(id));
+      }
+      island.append(table);
+      return island;
+    }
     for (const group of groups) {
       const subsection = makeElement('div', 'control-subsection');
       subsection.append(makeElement('h4', 'control-subsection-title', group.title));
@@ -428,7 +519,7 @@ function renderCategory(categoryId) {
     elements['field-grid'].append(createControlIsland('Controller', fieldIds));
   } else if (categoryId === 'keyboardMouse') {
     for (const island of controlIslands) {
-      elements['field-grid'].append(createControlIsland(island.title, island.fields, island.groups));
+      elements['field-grid'].append(createControlIsland(island.title, island.fields, island.groups, island.layout));
     }
   } else {
     for (const id of fieldIds) elements['field-grid'].append(createField(id));
@@ -440,7 +531,15 @@ function writeVisibleFields() {
   if (!settings) return;
   for (const control of elements['field-grid'].querySelectorAll('[data-setting]')) {
     const id = control.dataset.setting;
-    if (control.dataset.controlKind === 'preset') {
+    if (control.dataset.controlKind === 'keyBindings') {
+      const keys = String(settings[id] ?? 'None').split(',').map((key) => key.trim());
+      const slots = keys.length === 1 && keys[0] === 'None' ? [] : keys;
+      for (const button of control.querySelectorAll('[data-binding-slot]')) {
+        const key = slots[Number(button.dataset.bindingSlot)] ?? 'None';
+        button.dataset.boundKey = key;
+        button.textContent = listeningForBinding === button ? 'Press a key…' : key;
+      }
+    } else if (control.dataset.controlKind === 'preset') {
       const select = control.querySelector('select');
       const custom = control.querySelector('input');
       const value = settings[id] ?? '';
@@ -453,13 +552,10 @@ function writeVisibleFields() {
       control.value = settings.quests.map(({ id: questId, value }) => `Quest${questId} = ${value}`).join('\n');
     } else if (control instanceof HTMLButtonElement) {
       control.dataset.boundKey = settings[id] ?? '';
-      control.textContent = listeningForBinding === control ? 'Press a key…' : settings[id] ?? '';
-    } else if (id === 'drawDistance') {
-      const value = settings[id] ?? '';
-      if (value && !Array.from(control.options).some((option) => option.value === value)) {
-        control.add(new Option(`${value} (current setting)`, value));
-      }
-      control.value = value;
+      const value = id === 'chatKey' && !settings[id] ? 'None' : settings[id] ?? '';
+      control.textContent = listeningForBinding === control
+        ? 'Press one key…'
+        : value;
     } else {
       control.value = settings[id] ?? '';
     }
@@ -481,7 +577,12 @@ function readVisibleFields() {
   if (!settings) return;
   for (const control of elements['field-grid'].querySelectorAll('[data-setting]')) {
     const id = control.dataset.setting;
-    if (control.dataset.controlKind === 'preset') {
+    if (control.dataset.controlKind === 'keyBindings') {
+      const keys = [...control.querySelectorAll('[data-binding-slot]')]
+        .map((button) => button.dataset.boundKey ?? 'None')
+        .filter((key) => key !== 'None');
+      settings[id] = keys.length ? keys.join(', ') : 'None';
+    } else if (control.dataset.controlKind === 'preset') {
       const select = control.querySelector('select');
       settings[id] = select.value === '__custom__'
         ? control.querySelector('input').value
@@ -521,22 +622,34 @@ function keyNameFromCode(code) {
 function acceptBinding(name) {
   const control = listeningForBinding;
   if (!control) return;
-  if (name === 'None') {
-    capturedBindings = ['None'];
-  } else {
-    capturedBindings = [...capturedBindings.filter((binding) => binding !== 'None'), name]
-      .slice(0, 4);
+  const id = control.dataset.bindingSetting ?? control.dataset.setting;
+  if (fieldInfo[id].kind === 'chatKey') {
+    control.dataset.boundKey = name === 'None' ? '' : name;
+    settings[id] = control.dataset.boundKey;
+    control.textContent = control.dataset.boundKey || 'None';
+    elements['form-error'].hidden = true;
+    setDirty(true);
+    listeningForBinding = null;
+    return;
   }
-  control.dataset.boundKey = capturedBindings.join(', ');
-  settings[control.dataset.setting] = control.dataset.boundKey;
-  control.textContent = capturedBindings.length < 4 && capturedBindings[0] !== 'None'
-    ? `${control.dataset.boundKey} — press another or click to finish`
-    : control.dataset.boundKey;
+  const keys = String(settings[id] ?? 'None').split(',').map((key) => key.trim());
+  const bindings = keys.length === 1 && keys[0] === 'None' ? [] : keys;
+  const slot = Number(control.dataset.bindingSlot);
+  if (slot > 0 && bindings.length < slot) {
+    showToast('Assign the previous binding first.', true);
+    return;
+  }
+  if (name !== 'None' && bindings.some((key, index) => index !== slot && key === name)) {
+    showToast('That key is already assigned.', true);
+    return;
+  }
+  bindings[slot] = name;
+  const updatedBindings = bindings.filter((binding) => binding && binding !== 'None');
+  settings[id] = updatedBindings.length ? updatedBindings.join(', ') : 'None';
+  listeningForBinding = null;
+  writeVisibleFields();
   elements['form-error'].hidden = true;
   setDirty(true);
-  if (capturedBindings.length === 4 || capturedBindings[0] === 'None') {
-    listeningForBinding = null;
-  }
 }
 
 document.addEventListener('keydown', (event) => {
@@ -546,7 +659,7 @@ document.addEventListener('keydown', (event) => {
   if (event.code === 'Escape') {
     const control = listeningForBinding;
     listeningForBinding = null;
-    control.textContent = control.dataset.boundKey ?? '';
+    control.textContent = control.dataset.boundKey ?? 'None';
     return;
   }
   const name = keyNameFromCode(event.code);
@@ -558,7 +671,9 @@ document.addEventListener('keydown', (event) => {
 });
 
 document.addEventListener('mousedown', (event) => {
-  if (!listeningForBinding || event.target === listeningForBinding) return;
+  if (!listeningForBinding) return;
+  const id = listeningForBinding.dataset.bindingSetting ?? listeningForBinding.dataset.setting;
+  if (fieldInfo[id].kind !== 'key') return;
   const names = ['Mouse Left', 'Mouse Middle', 'Mouse Right', 'Mouse 4', 'Mouse 5'];
   const name = names[event.button];
   if (!name) return;
@@ -582,7 +697,7 @@ document.addEventListener('mouseup', () => {
 }, true);
 
 document.addEventListener('wheel', (event) => {
-  if (!listeningForBinding || event.deltaY === 0) return;
+  if (!listeningForBinding || fieldInfo[listeningForBinding.dataset.bindingSetting ?? listeningForBinding.dataset.setting].kind !== 'key' || event.deltaY === 0) return;
   event.preventDefault();
   event.stopImmediatePropagation();
   const name = event.deltaY < 0 ? 'Wheel Up' : 'Wheel Down';

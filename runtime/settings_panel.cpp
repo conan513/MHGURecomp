@@ -276,6 +276,7 @@ bool equal(const Config &a, const Config &b) {
     SAME(smooth_gradients);
     SAME(msaa);
     SAME(fxaa);
+    SAME(ssao);
     SAME(fxaa_mode);
     SAME(face_buttons);
     SAME(ldn_port);
@@ -658,9 +659,9 @@ void keybind_rows(std::vector<Row> &r) {
         row.activate = [copy, i]() {
             int free_slot = 0;
             while (free_slot < BIND_KEYS && s.draft.binds[i][free_slot]) free_slot++;
-            std::vector<std::string> names = {tr("Set key")};
+            std::vector<std::string> names = {tr("Set binding")};
             if (free_slot > 0 && free_slot < BIND_KEYS)
-                names.push_back(tr("Add another key"));
+                names.push_back(tr("Add another binding"));
             names.push_back(tr("None"));
             choices(copy, names, -1, [i, free_slot](int v) {
                 if (v == (free_slot > 0 && free_slot < BIND_KEYS ? 2 : 1))
@@ -708,6 +709,7 @@ void reset_section() {
         c.smooth_gradients = f.smooth_gradients;
         c.msaa = f.msaa;
         c.fxaa = f.fxaa;
+        c.ssao = f.ssao;
         c.fxaa_mode = f.fxaa_mode;
         c.volume = f.volume;
         c.mute_in_background = f.mute_in_background;
@@ -1017,6 +1019,7 @@ std::vector<Row> main_rows() {
                 r.back().value = tr("Off (FSR)");
             }
         }
+        add_bool(r, "ssao", "SSAO", &c.ssao, ini("SSAO"));
         add_bool(r, "fxaa", "FXAA", &c.fxaa, ini("FXAA"));
         if (g_config.fsr) {
             r.back().cold = true;
@@ -1285,7 +1288,7 @@ std::vector<Row> rows_for_view(bool *open) {
                 } else
                     s.error = tr("That key is already assigned.");
             }
-        } else if (key > 0 && *name && strlen(name) < sizeof s.draft.chat_key && !strpbrk(name, ";#")) {
+        } else if (key > 0 && !reserved && *name && strlen(name) < sizeof s.draft.chat_key && !strpbrk(name, ";#")) {
             SDL_strlcpy(s.draft.chat_key, name, sizeof s.draft.chat_key);
             pop();
         } else if (key > 0)

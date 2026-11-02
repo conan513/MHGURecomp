@@ -696,22 +696,22 @@ instead: it needs glibc 2.43 (sqrtf, acosf, asinf, atan2f, log10f).
 
 The keyboard and mouse controls were fixed in runtime/host_input.c. Now each is a setting of the ini's `[Keybinds]`
 (MoveUp/Down/Left/Right, Walk, A..ZR, Plus, Minus, DpadUp..Right, LeftStickClick, RightStickClick; config.h BIND_*),
-up to four keys or mouse buttons each: `A = F, Return, Mouse Right`, `X = G, H, Mouse Left`, `None`. The defaults
-preserve the earlier MHW-style keyboard/mouse layout while using the upstream keybind system. SDL's key names, but the
-file's own for the keys whose name has a ',' (the separator) or ';' / '#' (a
-comment): Comma, Keypad Comma, Semicolon, Keypad Hash; Mouse Left / Right / Middle / 4 / 5 (KEY_MOUSE + SDL_BUTTON_*).
+up to three bindings each: two keyboard choices and an extra mouse binding (for example
+`A = F, Return, Mouse Right`, `X = G, H, Mouse Left`). SDL's key names, but the file's own for keys whose names have
+a ',' (the separator) or ';' / '#' (a comment): Comma, Keypad Comma, Semicolon, Keypad Hash; Mouse Left / Right /
+Middle / 4 / 5 (KEY_MOUSE + SDL_BUTTON_*).
 The recomp's own keys (keymap.h: Escape, Insert, F1, F7..F12) are refused, in the file and in the menu. Live: a save
 applies them at once (config_live_bind). Older `[Keyboard]` and mouse-button assignments migrate to `[Keybinds]` in
 both the runtime and launcher; the launcher writes the migrated values before removing the legacy entries. Previously
 generated upstream defaults are also upgraded to this layout when no legacy values remain.
-- Settings (F1), Controls, Keybinds: a submenu with a row per keybind; Confirm: Set key / Add another key / None, then
+- Settings (F1), Controls, Keybinds: a submenu with a row per keybind; Confirm: Set binding / Add another binding / None, then
   a key, or a mouse button clicked away from the menu's rows (ImGui counts the controller-focused row as hovered, so
   this asks ImGuiHoveredFlags_NoNavOverride). A key that is also another keybind's, the chat key or the recomp's shows
   red with what else uses it. The Chat key row moved there (still `[Controls] ChatKey`); Reset this tab and the
   submenu's Reset keybinds reset both.
 - Any mouse button captures the mouse now (only left / right did); the capturing click is still not a button press.
-- Tests: test_settings (names, aliases, up to four keys, refused keys, save and reload, live values), test_settings_panel
-  (a key and a mouse button chosen for B, F12 refused, saved, reset). Not tried in the game by hand: the game started
+- Tests: test_settings (names, aliases, up to three bindings, refused keys, save and reload, live values), test_settings_panel
+  (two keys chosen for B, F12 refused, saved, reset). Not tried in the game by hand: the game started
   with an older ini, which got the section.
 
 ## exefs code mods: subsdk modules and code patches (2026-10-30)
@@ -937,7 +937,7 @@ key on ItemLeft / ItemRight, the wheel on a button keybind.
    (the Palico Scout's "Rotate" prompt). MHGU_CONTROL `hudtrace` logs a frame's HUD quads and their anchors. Left: the HUD's layout elsewhere (title, town, quest board, item box) unverified; at Edges
    the Hunter Arts prompt goes right with its layer; whether an off-screen 3D view (equipment box preview, guild
    card) uses one of the three cameras (they are left alone unless 16:9).
-10. Keyboard and mouse remapping: the runtime now reads the `[Keybinds]` section, with up to four keys, mouse buttons,
+10. Keyboard and mouse remapping: the runtime now reads the `[Keybinds]` section, with up to three keys or mouse buttons,
    or wheel directions for each Switch control, movement direction, stick click, and item-bar direction. The launcher
    migrates prior `[Keyboard]` and mouse-button assignments before removing obsolete entries; unrelated unknown INI
    settings are preserved.
