@@ -13,6 +13,7 @@
 //                         [Performance] ShaderPrewarm = Off does the same)
 #include <math.h>
 #include <pthread.h>
+#include <sched.h>
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,10 +22,14 @@
 #ifdef _WIN32
 #include <windows.h>
 #endif
+#ifdef __x86_64__
+#include <immintrin.h>
+#endif
 
 #include "../../kernel.h"
 #include "../../camera_jitter.h"
 #include "fsr.h"
+#include "hdr.h"
 #include "shaders.h"
 #include "vk.h"
 
@@ -65,7 +70,62 @@ static pthread_mutex_t seq_lock = PTHREAD_MUTEX_INITIALIZER;
 static bool in_pass;
 static void ss_forget(void);
 
+// Without timeline semaphores (g_vk.fences: Vulkan 1.1 devices): a fence per submission stands in for the timeline's
+// value. A fence that signals also covers everything submitted before it, so the numbers mean the same. The ring is much
+// larger than the SUBS submissions that can be in flight, so the submission a fence last served is long finished when
+// it comes round again. fence_lock guards all of this; a thread in vkWaitForFences keeps its fence from being reset.
+#define SEQ_FENCES 64
+static struct { VkFence fence; int waiters; } seq_fence[SEQ_FENCES];
+static uint64_t fence_done, fence_last;  // last submission known finished, last one submitted with its fence
+static pthread_mutex_t fence_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static VkFence seq_fence_take(uint64_t seq) {
+    int i = (int)(seq % SEQ_FENCES);
+    pthread_mutex_lock(&fence_lock);
+    while (seq_fence[i].waiters) {  // (finished long ago: they are on their way out of vkWaitForFences)
+        pthread_mutex_unlock(&fence_lock);
+        sched_yield();
+        pthread_mutex_lock(&fence_lock);
+    }
+    if (!seq_fence[i].fence) {
+        VkFenceCreateInfo fi = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+        VK_CHECK(vkCreateFence(g_vk.dev, &fi, NULL, &seq_fence[i].fence));
+    } else {
+        VK_CHECK(vkResetFences(g_vk.dev, 1, &seq_fence[i].fence));
+    }
+    if (seq > SEQ_FENCES && fence_done < seq - SEQ_FENCES) fence_done = seq - SEQ_FENCES;  // (its fence is this one now)
+    VkFence f = seq_fence[i].fence;
+    pthread_mutex_unlock(&fence_lock);
+    return f;
+}
+
+static uint64_t fence_completed(void) {
+    pthread_mutex_lock(&fence_lock);
+    while (fence_done < fence_last && vkGetFenceStatus(g_vk.dev, seq_fence[(fence_done + 1) % SEQ_FENCES].fence) == VK_SUCCESS)
+        fence_done++;
+    uint64_t v = fence_done;
+    pthread_mutex_unlock(&fence_lock);
+    return v;
+}
+
+static VkResult fence_wait(uint64_t seq, uint64_t timeout) {
+    pthread_mutex_lock(&fence_lock);
+    if (seq > fence_last) seq = fence_last;  // not submitted yet (other thread): everything submitted so far
+    if (seq <= fence_done) { pthread_mutex_unlock(&fence_lock); return VK_SUCCESS; }
+    int i = (int)(seq % SEQ_FENCES);
+    VkFence f = seq_fence[i].fence;
+    seq_fence[i].waiters++;
+    pthread_mutex_unlock(&fence_lock);
+    VkResult r = vkWaitForFences(g_vk.dev, 1, &f, VK_TRUE, timeout);
+    pthread_mutex_lock(&fence_lock);
+    seq_fence[i].waiters--;
+    if (r == VK_SUCCESS && fence_done < seq) fence_done = seq;
+    pthread_mutex_unlock(&fence_lock);
+    return r;
+}
+
 uint64_t vk_completed_seq(void) {
+    if (g_vk.fences) return fence_completed();
     uint64_t v = 0;
     g_vk.get_semaphore_counter(g_vk.dev, g_vk.timeline, &v);
     return v;
@@ -74,6 +134,13 @@ uint64_t vk_completed_seq(void) {
 void vk_wait_seq(uint64_t seq) {
     if (!seq || vk_exiting()) return;  // (exit in progress: never reach the driver from a late guest thread)
     uint64_t t0_ = plat_now_ns();
+    if (g_vk.fences) {
+        VkResult fr = fence_wait(seq, 10ull * 1000000000ull);
+        stat_wait_ns += plat_now_ns() - t0_;
+        if (fr == VK_TIMEOUT) LOG("[vk] GPU did not finish submission %llu within 10 s (device lost?)\n", (unsigned long long)seq);
+        else if (fr != VK_SUCCESS) FATAL("vkWaitForFences: %d (device lost)\n", fr);
+        return;
+    }
     VkSemaphoreWaitInfo wi = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO, .semaphoreCount = 1, .pSemaphores = &g_vk.timeline,
                               .pValues = &seq};
     VkResult r = g_vk.wait_semaphores(g_vk.dev, &wi, 10ull * 1000000000ull);
@@ -159,7 +226,19 @@ void vk_submit_extra(VkSemaphore wait, VkSemaphore signal) {
     VkSubmitInfo si = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .pNext = &ts, .waitSemaphoreCount = wait ? 1 : 0,
                        .pWaitSemaphores = &wait, .pWaitDstStageMask = &wait_stage, .commandBufferCount = n,
                        .pCommandBuffers = cbs, .signalSemaphoreCount = signal ? 2 : 1, .pSignalSemaphores = sig};
-    VK_CHECK(vkQueueSubmit(g_vk.queue, 1, &si, VK_NULL_HANDLE));
+    VkFence fence = VK_NULL_HANDLE;
+    if (g_vk.fences) {
+        fence = seq_fence_take(submit_seq + 1);
+        si.pNext = NULL;
+        si.signalSemaphoreCount = signal ? 1 : 0;
+        si.pSignalSemaphores = &signal;
+    }
+    VK_CHECK(vkQueueSubmit(g_vk.queue, 1, &si, fence));
+    if (g_vk.fences) {
+        pthread_mutex_lock(&fence_lock);
+        fence_last = submit_seq + 1;
+        pthread_mutex_unlock(&fence_lock);
+    }
     pthread_mutex_lock(&seq_lock);
     submit_seq++;
     pthread_mutex_unlock(&seq_lock);
@@ -762,16 +841,25 @@ void vk_framebuffers_forget_view(VkImageView v) {
 
 // ================================================================== passes
 static VkFormat pass_color[8], pass_depth;
+static bool pass_d24_as_float;  // the depth attachment is a DEPTH24_STENCIL8 made as D32S8 (polygon offsets in D24 steps)
 static uint32_t pass_ncolor, pass_samples = 1, pass_w, pass_h;
 static bool ui_relax_scissor;  // the draw being set up moved a HUD piece out from under the game's scissor
 static int ui_scissor_v = -1;  // 16:10: the draw being set up is a HUD piece anchored so (0 top, 1 centre, 2 bottom),
                                // and its scissor moves with it
 static bool ui_menu_pass;  // this pass drew a layer 97 menu before (the windows of layer 100 then sit beside Top-anchored ones)
-// The HUD quads this pass drew last (16:9 canvas place, vertical anchor 0 top / 1 centre / 2 bottom, horizontal 0 left /
-// 1 right / 2 centre): a model preview follows the window drawn over it (ui_preview_map)
+static uint64_t ui_menu_frame;  // the frame (g_present_count) that last drew a layer 97 menu (ui_preview_map)
+// The HUD quads drawn last (16:9 canvas place, vertical anchor 0 top / 1 centre / 2 bottom, horizontal 0 left / 1 right /
+// 2 centre): a model preview follows the window drawn over it (ui_preview_map). Kept across passes: the Smithy's model
+// is drawn in a pass of its own, after the parchment it sits in.
 #define UI_RECENT 256
-static struct { float x, y; uint8_t vanchor, hanchor; } ui_recent[UI_RECENT];
-static uint32_t ui_nrecent;  // (quads recorded this pass; the slot is the count modulo UI_RECENT)
+static struct { float x, y, z; uint8_t vanchor, hanchor; } ui_recent[UI_RECENT];
+// The last model preview's box (canvas units) and how its window is anchored vertically (ui_preview_map): the window's
+// frame and prompts around it go so (cbuf_info; they are drawn before the model, so last frame's box)
+static float ui_pv_x0, ui_pv_x1, ui_pv_y0, ui_pv_y1;
+static int ui_pv_v = -1;
+static uint64_t ui_pv_present;
+static uint32_t ui_nrecent, ui_pass_recent;  // (quads recorded so far, the slot is the count modulo UI_RECENT; and when
+                                             // this pass began)
 static bool ui_loading_pass;  // this pass draws the loading screen (its backdrop, layer 110, came first)
 static bool ui_title_pass;  // this pass draws the title screen (its layout, layer 108 at the canvas centre, came first)
 static bool ui_frontend_pass;  // this pass draws a front-end screen (Main Menu, Character Select: its 16:9 backdrop, layer
@@ -798,6 +886,13 @@ static struct {
     uint8_t anchors;  // (bit per vertical anchor among its pieces)
     struct { float *m, pos_x, pos_y; uint8_t vanchor; uint32_t recent; } p[UI_GROUP_MAX];
 } ui_group;
+// The group settled last in this pass (16:10), as it was placed: a window stacked right under it on the same layer
+// (the chat log's box under its "Chat" label) goes with it (ui_group_end)
+static struct {
+    int n, v;  // v: the anchor its pieces got (one for all; -1 when they kept their own, which disagreed)
+    float z, xmin, xmax, ymin, ymax;
+    struct { float *m, pos_y; uint32_t recent; } p[UI_GROUP_MAX];
+} ui_group_prev;
 // Each group's final anchor, by its first piece (layer and place): the HUD is drawn the same way every frame, so the
 // scissors of a group's pieces, recorded before the group is complete, take the anchor it got last frame
 #define UI_KNOWN 64
@@ -871,18 +966,49 @@ static void ui_group_end(void) {
     int v = n < 2 ? -1 : ui_group_vanchor();
     ui_group_remember(v >= 0 ? v : ui_group.p[0].vanchor);
     ui_group.n = 0;
-    if (v < 0) return;
     float sy = g_render_aspect / (16.0f / 9.0f);
-    for (int i = 0; i < n; i++) {
-        float y = ui_group.p[i].pos_y;
-        ui_group.p[i].m[13] = v == 0 ? y * sy : v == 2 ? 720.0f - (720.0f - y) * sy : 360.0f + (y - 360.0f) * sy;
-        if (ui_nrecent - ui_group.p[i].recent <= UI_RECENT) ui_recent[ui_group.p[i].recent % UI_RECENT].vanchor = (uint8_t)v;
+    if (v >= 0) {
+        for (int i = 0; i < n; i++) {
+            float y = ui_group.p[i].pos_y;
+            ui_group.p[i].m[13] = v == 0 ? y * sy : v == 2 ? 720.0f - (720.0f - y) * sy : 360.0f + (y - 360.0f) * sy;
+            if (ui_nrecent - ui_group.p[i].recent <= UI_RECENT) ui_recent[ui_group.p[i].recent % UI_RECENT].vanchor = (uint8_t)v;
+        }
+        if (g_hudtrace_active) LOG("[hud] group z %.1f: %d pieces, y %.1f..%.1f -> %c\n", ui_group.z, n, ui_group.ymin, ui_group.ymax, "TCB"[v]);
     }
-    if (g_hudtrace_active) LOG("[hud] group z %.1f: %d pieces, y %.1f..%.1f -> %c\n", ui_group.z, n, ui_group.ymin, ui_group.ymax, "TCB"[v]);
+    // A window stacked right on the one before it (same layer, overlapping sideways, its top within 8 of the other's
+    // bottom or the other way round) is one picture with it: the chat log's "Chat" label (y 547..598, Top) and its
+    // message box (596..708, Bottom) came apart by 70. When the two went different ways, both take the anchor of where
+    // the pair sits, as one group would; when they agree nothing changes.
+    int vf = v >= 0 ? v : ui_group.p[0].vanchor;  // (v < 0: its pieces agree)
+    if (ui_group_prev.n && vf >= 0 && ui_group_prev.v >= 0 && vf != ui_group_prev.v && fabsf(ui_group_prev.z - ui_group.z) < 0.5f &&
+        ui_group.xmin < ui_group_prev.xmax && ui_group.xmax > ui_group_prev.xmin &&
+        (fabsf(ui_group.ymin - ui_group_prev.ymax) <= 8.0f || fabsf(ui_group.ymax - ui_group_prev.ymin) <= 8.0f)) {
+        float ymin = fminf(ui_group.ymin, ui_group_prev.ymin), ymax = fmaxf(ui_group.ymax, ui_group_prev.ymax);
+        float above = ymin, below = 720.0f - ymax;
+        int w = above < 0.5f * below ? 0 : below < 0.5f * above ? 2 : 1;
+        for (int k = 0; k < 2; k++) {
+            int m = k ? ui_group_prev.n : n;
+            for (int i = 0; i < m; i++) {
+                float *mm = k ? ui_group_prev.p[i].m : ui_group.p[i].m, y = k ? ui_group_prev.p[i].pos_y : ui_group.p[i].pos_y;
+                uint32_t r = k ? ui_group_prev.p[i].recent : ui_group.p[i].recent;
+                mm[13] = w == 0 ? y * sy : w == 2 ? 720.0f - (720.0f - y) * sy : 360.0f + (y - 360.0f) * sy;
+                if (ui_nrecent - r <= UI_RECENT) ui_recent[r % UI_RECENT].vanchor = (uint8_t)w;
+            }
+        }
+        if (g_hudtrace_active)
+            LOG("[hud] stacked z %.1f: y %.1f..%.1f with %.1f..%.1f -> %c\n", ui_group.z, ui_group_prev.ymin, ui_group_prev.ymax,
+                ui_group.ymin, ui_group.ymax, "TCB"[w]);
+        vf = w;
+    }
+    ui_group_prev.n = n, ui_group_prev.v = vf, ui_group_prev.z = ui_group.z;
+    ui_group_prev.xmin = ui_group.xmin, ui_group_prev.xmax = ui_group.xmax, ui_group_prev.ymin = ui_group.ymin, ui_group_prev.ymax = ui_group.ymax;
+    for (int i = 0; i < n; i++)
+        ui_group_prev.p[i].m = ui_group.p[i].m, ui_group_prev.p[i].pos_y = ui_group.p[i].pos_y, ui_group_prev.p[i].recent = ui_group.p[i].recent;
 }
 static void ui_group_add(float *m, float pos_z, float pos_x, float pos_y, int vanchor) {
-    // Not near: more than 400 above or below (a frame drawn as its corners only, the help windows' 336 high, is one group;
-    // the target cam at y 42..82 and the Hunter Arts prompts below y 600 are two), or a piece of another anchor beside the
+    // Not near: more than 470 above or below (a frame drawn as its corners only, the help windows' 336 high, the Weapon
+    // Controls sheet's back parchment 436, is one group; the target cam at y 42..82 and the Hunter Arts prompts below
+    // y 600, 518 apart, are two), or a piece of another anchor beside the
     // group both sideways and vertically (the Guild Card's page counter, top right, next to its page; a window's own
     // pieces line up with the rest of it on one side: its other corner, its bottom edge). Wider than 16:9 by place alone:
     // the pieces' own anchors are the ones that split a window there.
@@ -890,7 +1016,7 @@ static void ui_group_add(float *m, float pos_z, float pos_x, float pos_y, int va
     bool apart = (g_render_aspect > 16.0f / 9.0f || !(ui_group.anchors & (1u << vanchor))) &&
                  (pos_x < ui_group.xmin - margin || pos_x > ui_group.xmax + margin) &&
                  (pos_y < ui_group.ymin - margin || pos_y > ui_group.ymax + margin);
-    if (ui_group.n && (fabsf(pos_z - ui_group.z) > 0.5f || pos_y < ui_group.ymin - 400.0f || pos_y > ui_group.ymax + 400.0f ||
+    if (ui_group.n && (fabsf(pos_z - ui_group.z) > 0.5f || pos_y < ui_group.ymin - 470.0f || pos_y > ui_group.ymax + 470.0f ||
                        apart || ui_group.n == UI_GROUP_MAX))
         ui_group_end();
     if (!ui_group.n) {
@@ -916,7 +1042,7 @@ static struct {
     uint32_t known, vb_known;
     VkPipeline pipe;
     uint32_t sten[2][3];  // compare mask, write mask, reference per face
-    float bc[4], db[3];
+    float bc[4], db[4];
     VkViewport vp;
     VkRect2D sc;
     VkBuffer ib; VkDeviceSize io; VkIndexType it;
@@ -944,6 +1070,30 @@ static float half_to_float(uint16_t h) {
     float v = e == 0 ? ldexpf((float)m, -24) : e == 31 ? (m ? NAN : INFINITY) : ldexpf((float)(m | 1024), (int)e - 25);
     return s ? -v : v;
 }
+// (HDR: the game's RGBA8 texels into an RGBA16F stand-in) v / 255 as a half float, rounded to nearest
+static uint16_t unorm8_to_half(uint8_t v) {
+    static uint16_t tab[256];
+    static bool made;
+    if (!made) {
+        for (int i = 1; i < 256; i++) {
+            float f = (float)i / 255.0f;
+            int e;
+            float m = frexpf(f, &e);  // f = m * 2^e, m in [0.5, 1)
+            int he = e - 1 + 15;      // half exponent of 2m * 2^(e-1)
+            uint32_t hm;
+            if (he <= 0) {            // subnormal
+                hm = (uint32_t)lrintf(f * 16777216.0f);  // f / 2^-24
+                tab[i] = (uint16_t)hm;
+            } else {
+                hm = (uint32_t)lrintf((m * 2.0f - 1.0f) * 1024.0f);
+                if (hm == 1024) hm = 0, he++;
+                tab[i] = (uint16_t)((he << 10) | hm);
+            }
+        }
+        made = true;
+    }
+    return tab[v];
+}
 static float uf11(uint32_t v, int mbits) {  // unsigned small float: 5-bit exponent, mbits mantissa
     uint32_t e = v >> mbits, m = v & ((1u << mbits) - 1);
     if (e == 0) return ldexpf((float)m, -14 - mbits);
@@ -969,7 +1119,8 @@ static void dump_pass(void) {
     uint64_t draws = stat_draws - pass_draws_at;
     if (t && t->backend) vk_ms_resolve(t->backend);  // (MSAA: resolved for the dump)
     if (dump_depth && dump_depth->backend) vk_ms_resolve(dump_depth->backend);
-    if ((!t || !t->backend) && dump_depth && dump_depth->backend && ((TexBackend *)dump_depth->backend)->format == VK_FORMAT_D32_SFLOAT) {
+    VkFormat dfmt = dump_depth && dump_depth->backend ? ((TexBackend *)dump_depth->backend)->format : VK_FORMAT_UNDEFINED;
+    if ((!t || !t->backend) && (dfmt == VK_FORMAT_D32_SFLOAT || dfmt == VK_FORMAT_D32_SFLOAT_S8_UINT || dfmt == VK_FORMAT_D24_UNORM_S8_UINT)) {
         // depth-only pass (shadow maps): depth as grey, stretched over its own min..max
         TexBackend *b = dump_depth->backend;
         uint32_t w = b->width, h = b->height;
@@ -980,7 +1131,9 @@ static void dump_pass(void) {
         vkCmdCopyImageToBuffer(cb, b->image, VK_IMAGE_LAYOUT_GENERAL, out.buf, 1, &c);
         renderer_submit();
         vk_wait_seq(submit_seq);
-        const float *d = out.ptr;
+        float *d = out.ptr;
+        if (dfmt == VK_FORMAT_D24_UNORM_S8_UINT)  // (24-bit depth in the low bits of each word)
+            for (uint64_t i = 0; i < (uint64_t)w * h; i++) d[i] = (float)(((const uint32_t *)out.ptr)[i] & 0xFFFFFF) / 16777215.0f;
         float lo = INFINITY, hi = -INFINITY;
         for (uint64_t i = 0; i < (uint64_t)w * h; i++) if (d[i] < 1.0f) { if (d[i] < lo) lo = d[i]; if (d[i] > hi) hi = d[i]; }
         uint8_t *px = malloc((size_t)w * h * 4);
@@ -1052,6 +1205,15 @@ static void dump_pass(void) {
     }
     char path[128];
     mkdir("shots", 0755);
+    if (b->format == VK_FORMAT_R16G16B16A16_SFLOAT && w >= 4 && h >= 4) {  // (HDR) the real values: every 4th texel, RGBA16F
+        snprintf(path, sizeof path, "%s%03d_rgba16f_%ux%u.raw", dump_prefix(), g_dump_no, w / 4, h / 4);
+        FILE *rf = fopen(path, "wb");
+        if (rf) {
+            for (uint32_t y = 0; y + 4 <= h; y += 4)
+                for (uint32_t x = 0; x + 4 <= w; x += 4) fwrite((const uint8_t *)out.ptr + ((uint64_t)y * w + x) * 8, 8, 1, rf);
+            fclose(rf);
+        }
+    }
     snprintf(path, sizeof path, "%s%03d_f%d_%ux%u.png", dump_prefix(), g_dump_no, b->format, w, h);
     vk_save_png(path, px, w, h);
     snprintf(path, sizeof path, "%s%03d_alpha.png", dump_prefix(), g_dump_no);
@@ -1069,6 +1231,7 @@ volatile int g_gpuprof_request;
 static int gp_active, gp_n, gp_pass;
 static VkQueryPool gp_pool;
 static char gp_label[256][64];
+static const char *gp_pass_note = "", *gp_next_note = "";  // what this pass and the next one are, when known (FXAA)
 
 static void gp_mark(const char *label) {
     if (!gp_active || gp_n >= 256) return;
@@ -1129,13 +1292,13 @@ static bool models_2d_in_samples(void) { return mr_frame == g_present_count && m
 void vk_end_pass(void) {
     if (!in_pass) return;
     ui_group_end();
-    if (ui_nrecent) ui_results_last = ui_results_pass;
+    if (ui_nrecent != ui_pass_recent) ui_results_last = ui_results_pass;
     vkCmdEndRenderPass(vk_cmd());
     in_pass = false;
     if (gp_active) {
         char l[64];
-        snprintf(l, sizeof l, "pass %d %ux%u%s, %llu draws", gp_pass++, pass_w, pass_h, pass_msaa ? " MSAA" : "",
-                 (unsigned long long)(stat_draws - pass_draws_at));
+        snprintf(l, sizeof l, "pass %d %ux%u%s, %llu draws%s", gp_pass++, pass_w, pass_h, pass_msaa ? " MSAA" : "",
+                 (unsigned long long)(stat_draws - pass_draws_at), gp_pass_note);
         gp_mark(l);
     }
     if (pass_msaa) for (uint32_t k = 0; k < pass_natt; k++) pass_att[k]->ms_dirty = true;
@@ -1519,7 +1682,8 @@ static void begin_pass(void) {
         NvnTexture *t = st.rt.color[i];
         pass_color[i] = VK_FORMAT_UNDEFINED;
         if (!t) continue;
-        vk_rt_widen(t, vk_wide_rt_on() && !vk_fsr_input(t));  // (the game's own target: FSR 3 / 4 take no RGBA16 UNORM)
+        // (the game's own target: FSR 3 / 4 take no RGBA16 UNORM. HDR: the post chain and the scene as RGBA16F, hdr.c)
+        vk_rt_widen(t, vk_fsr_input(t) ? WIDE_NONE : vk_hdr_rt_float(t) ? WIDE_FLOAT16 : vk_wide_rt_on() ? WIDE_UNORM16 : WIDE_NONE);
         if (g_fsr_on) {  // FSR: from the start of the HUD on, an output-size stand-in (fsr.c)
             NvnTexture *s = vk_fsr_map(t, false);
             if (s != t) pass_sx = (float)s->width / (float)t->width, pass_sy = (float)s->height / (float)t->height, t = s;
@@ -1541,6 +1705,7 @@ static void begin_pass(void) {
         pass_samples = b->samples;
     }
     pass_depth = VK_FORMAT_UNDEFINED;
+    pass_d24_as_float = false;
     NvnTexture *dt = st.rt.depth && pass_sx != 1.0f ? vk_fsr_map(st.rt.depth, true) : st.rt.depth;  // (FSR: as above)
     if (dt) {
         renderer_mark_gpu_owned(dt);
@@ -1548,6 +1713,7 @@ static void begin_pass(void) {
         TexBackend *b = dt->backend;
         if (v && renderer_format_is_depth(dt->format) && b->aspect != VK_IMAGE_ASPECT_COLOR_BIT) {
             pass_depth = b->format;
+            pass_d24_as_float = dt->format == 0x35 && b->format == VK_FORMAT_D32_SFLOAT_S8_UINT;  // (0x35: DEPTH24_STENCIL8)
             att[nviews] = b, att_fmt[nviews] = b->format, att_index[nviews] = -1;
             views[nviews++] = v;
             uint32_t lv = st.rt.has_dview && (st.rt.dview.setmask & 1) ? st.rt.dview.base_level : 0;
@@ -1568,7 +1734,8 @@ static void begin_pass(void) {
     ui_results_pass = false;
     ui_meownster_pass = false;
     ui_menu_pass = false;
-    ui_nrecent = 0;
+    ui_pass_recent = ui_nrecent;
+    ui_group_prev.n = 0;  // (its matrices are submitted with the pass)
     pass_msaa = false;
     // (MSAA: a colour target 3D models were drawn into lately (ms_expand), while they are; once they are not, it is like
     // any other target again)
@@ -1632,6 +1799,7 @@ static void begin_pass(void) {
     }
     VkFramebuffer fb = vk_framebuffer(pass_rp, views, nviews, minw, minh);
     gp_mark("  (between passes)");
+    gp_pass_note = gp_next_note, gp_next_note = "";
     VkRenderPassBeginInfo bi = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, .renderPass = pass_rp, .framebuffer = fb,
                                 .renderArea = {{0, 0}, {minw, minh}}};
     vkCmdBeginRenderPass(cb, &bi, VK_SUBPASS_CONTENTS_INLINE);
@@ -1688,15 +1856,24 @@ static bool ui_preview_map(PreviewMap *pm) {
     float w = vp[2], h = fabsf(vp[3]);
     if (w < 8.0f || w > 0.9f * pw || h > 0.98f * ph) return false;  // (the scene itself: the whole picture)
     *pm = (PreviewMap){0, 1, 0, 1};
-    // The window it is drawn in: the last quad over the viewport (inside it sideways, not below it). The last quad of all
-    // can be a button prompt under the window ("Rotate" under the Palico Scout preview), anchored apart from it.
-    int vanchor = ui_nrecent ? ui_recent[(ui_nrecent - 1) % UI_RECENT].vanchor : 1, hanchor = -1;
+    // The window it is drawn in: the last quad over the viewport (inside it sideways, give or take 60: a frame drawn as
+    // one turned quad is placed by its corner, just outside the box, as the Poogie costume's at x 161 beside a box from
+    // x 204; not below it). The last quad of all
+    // can be a button prompt under the window ("Rotate" under the Palico Scout preview), anchored apart from it; with
+    // no quad over it, the last one of this pass, or the centre.
+    int vanchor = ui_nrecent != ui_pass_recent ? ui_recent[(ui_nrecent - 1) % UI_RECENT].vanchor : 1, hanchor = -1;
     {
         float x0 = vp[0] / pw * 1280.0f, x1 = (vp[0] + w) / pw * 1280.0f, y1 = (fminf(vp[1], vp[1] + vp[3]) + h) / ph * 720.0f;
         for (uint32_t i = ui_nrecent; i > 0 && ui_nrecent - i < UI_RECENT; i--) {
             uint32_t k = (i - 1) % UI_RECENT;
-            if (ui_recent[k].x >= x0 && ui_recent[k].x <= x1 && ui_recent[k].y <= y1) {
+            if (ui_recent[k].x >= x0 - 60.0f && ui_recent[k].x <= x1 + 60.0f && ui_recent[k].y <= y1) {
                 vanchor = ui_recent[k].vanchor, hanchor = ui_recent[k].hanchor;
+                // A window on the left beside the menus (the Smithy's parchment, the Poogie costume's) goes Top with
+                // them, as the Request Log does (layer 100's rule); these come before the menu in their pass, so the
+                // rule's ui_menu_pass missed them: the window went Bottom, out of line with the menus.
+                if (asp < 16.0f / 9.0f && ui_menu_frame + 1 >= g_present_count && fabsf(ui_recent[k].z - 100.0f) < 0.5f && ui_recent[k].x < 630.0f &&
+                    ui_recent[k].y < 560.0f)
+                    vanchor = 0;
                 break;
             }
         }
@@ -1717,13 +1894,25 @@ static bool ui_preview_map(PreviewMap *pm) {
     } else {
         float sy = asp / (16.0f / 9.0f);
         pm->ky = sy;
+        // (config.c camera_aspect gives a camera of this box's shape the box's 16:9 shape)
+        float a = w / h;
+        int slot = 0;
+        for (int i = 0; i < 4; i++) {
+            if (fabsf(g_preview_box_aspect[i] / a - 1.0f) < 0.001f) { slot = i; break; }
+            if (g_preview_box_present[i] < g_preview_box_present[slot]) slot = i;
+        }
+        g_preview_box_aspect[slot] = a, g_preview_box_present[slot] = g_present_count;
+        ui_pv_x0 = vp[0] / pw * 1280.0f, ui_pv_x1 = (vp[0] + w) / pw * 1280.0f;
+        ui_pv_y0 = fminf(vp[1], vp[1] + vp[3]) / ph * 720.0f, ui_pv_y1 = ui_pv_y0 + h / ph * 720.0f;
+        ui_pv_v = vanchor, ui_pv_present = g_present_count;
         if (vanchor == 0) pm->sy = 0;
         else if (vanchor == 2) pm->sy = ph * (1.0f - sy);
         else pm->sy = ph * 0.5f * (1.0f - sy);
     }
     if (g_hudtrace_active)
-        LOG("[hud] preview vp %.0f,%.0f %.0fx%.0f sc %d,%d %dx%d (pass %.0fx%.0f) -> sx %.1f kx %.3f sy %.1f ky %.3f\n", vp[0], vp[1], w, h,
-            st.scissor[0][0], st.scissor[0][1], st.scissor[0][2], st.scissor[0][3], pw, ph, pm->sx, pm->kx, pm->sy, pm->ky);
+        LOG("[hud] preview vp %.0f,%.0f %.0fx%.0f sc %d,%d %dx%d (pass %.0fx%.0f) -> sx %.1f kx %.3f sy %.1f ky %.3f%s\n", vp[0], vp[1], w, h,
+            st.scissor[0][0], st.scissor[0][1], st.scissor[0][2], st.scissor[0][3], pw, ph, pm->sx, pm->kx, pm->sy, pm->ky,
+            ui_menu_frame + 1 >= g_present_count ? " menu" : "");
     return true;
 }
 
@@ -2100,12 +2289,22 @@ static void save_glsl(const char *src, uint64_t addr, const char *suffix) {
     if (f) { fputs(src, f); fclose(f); }
 }
 
+#define FXAA_FS_HASH 0x8530ded68f4407dfull  // the game's FXAA fragment shader
+static uint64_t prog_fs_hash(Prog *p);
+
 static void compile_program(void *arg) {
     Prog *p = arg;
     uint64_t t0 = plat_now_ns();
     size_t nv = 0, nf = 0;
     uint32_t *sv = vk_glsl_to_spirv(p->vi->msl, STAGE_VERTEX, "vs", &nv);
     const char *fsrc = p->fi->msl;
+    // The game's FXAA: hand-written, as the translation is slow (shaders.c "fxaa.frag.game"). Here and not at the
+    // translation, so that it also reaches the sources kept in programs.src by earlier versions.
+    if (prog_fs_hash(p) == FXAA_FS_HASH && !p->fkey.alpha_func && !p->fkey.alpha_coverage && !p->fkey.rt_kind[0] &&
+        (p->fkey.vs_out_mask & 2))
+        fsrc = vk_builtin_source("fxaa.frag.game");
+    char *hdr_src = p->fkey.hdr ? vk_hdr_wrap_fs(fsrc, p->fkey.hdr) : vk_hdr_guard_fs(fsrc);  // (HDR: main() wrapped, hdr.c)
+    if (hdr_src) fsrc = hdr_src;
     char *over = NULL;
     if (getenv("MHGU_GLSL_OVERRIDE")) {  // (debug) glsl_override/<code address>_fs.glsl replaces the translated shader
         char path[96];
@@ -2121,8 +2320,12 @@ static void compile_program(void *arg) {
             LOG("[shader] using %s\n", path);
         }
     }
-    uint32_t *sf = sv ? vk_glsl_to_spirv(fsrc, STAGE_FRAGMENT, "fs", &nf) : NULL;
+    uint32_t *sf = sv ? vk_glsl_to_spirv(fsrc, STAGE_FRAGMENT, p->fkey.hdr ? "fs_hdr" : "fs", &nf) : NULL;
+    if (p->fkey.hdr)
+        LOG("[hdr] HDR variant of pass %d (fragment program %016llx): %s%s\n", p->fkey.hdr, (unsigned long long)prog_fs_hash(p),
+            sf ? "built" : "FAILED to compile", hdr_src ? "" : " (not wrapped)");
     free(over);
+    free(hdr_src);
     if (!sv || !sf) { free(sv); free(sf); set_state(&p->state, 2, p->t_req); prewarm_pipelines(p); return; }
     p->nbinds = vk_reflect(sv, nv, p->binds, MAX_BIND);
     p->nbinds += vk_reflect(sf, nf, p->binds + p->nbinds, MAX_BIND - p->nbinds);
@@ -2243,6 +2446,7 @@ static uint64_t prog_content_key(const uint64_t chash[2], const ShaderKey *vkey,
     h = hash_words(h, fkey->rt_kind, sizeof fkey->rt_kind);
     h = hash_words(h, &fkey->alpha_func, 1);
     if (fkey->alpha_coverage) h = hash_words(h, &fkey->alpha_coverage, 1);  // (MSAA variant)
+    if (fkey->hdr) h = hash_words(h, &fkey->hdr, 1);  // (HDR variant, hdr.c)
     return h ? h : 1;
 }
 
@@ -2430,7 +2634,16 @@ static void prog_want(Prog *p) {
 typedef struct { uint64_t code[2], cmax[2]; } PrewarmReq;
 static void plist_seen(const uint64_t code[2], const uint64_t cmax[2], const uint64_t chash[2]);  // (pipelines.list)
 static uint64_t pw_t0;
-static _Atomic uint64_t pw_total_new, pw_total_known;
+static _Atomic uint64_t pw_total_new, pw_total_known, pw_created;
+
+// The prewarm's progress for the loading indicator (runtime/overlay.cpp): programs done of those the game has made so
+// far; false once none is left (or there never was a prewarm). Any thread.
+bool shader_prewarm_progress(uint64_t *done, uint64_t *total) {
+    uint64_t left = atomic_load(&stat_pw_left), all = atomic_load(&pw_created);  // (left first: all >= left)
+    if (done) *done = all > left ? all - left : 0;
+    if (total) *total = all;
+    return left != 0;
+}
 
 static void prewarm_done(void) {
     if (atomic_fetch_sub(&stat_pw_left, 1) != 1) return;
@@ -2507,6 +2720,7 @@ void backend_program_created(const NvnProgram *np) {
         r->code[i] = np->stages[i].code_addr;
         r->cmax[i] = np->stages[i].const_offset ? np->stages[i].const_offset : 0x10000;
     }
+    atomic_fetch_add(&pw_created, 1);
     if (atomic_fetch_add(&stat_pw_left, 1) == 0 && !pw_t0) pw_t0 = plat_now_ns();
     enqueue(&translate_q, 1, true, prewarm_translate, r);
 }
@@ -2521,6 +2735,7 @@ static Prog *get_program(NvnProgram *np, ShaderKey *vkey, ShaderKey *fkey) {
     h = hash_words(h, fkey->rt_kind, sizeof fkey->rt_kind);
     h = hash_words(h, &fkey->alpha_func, 1);
     if (fkey->alpha_coverage) h = hash_words(h, &fkey->alpha_coverage, 1);  // (MSAA variant)
+    if (fkey->hdr) h = hash_words(h, &fkey->hdr, 1);                        // (HDR variant, hdr.c)
     if (!h) h = 1;
     uint32_t slot = (uint32_t)(h ^ (h >> 31)) & (PROG_TAB - 1);
     while (prog_tab[slot].key && prog_tab[slot].key != h) slot = (slot + 1) & (PROG_TAB - 1);
@@ -3133,13 +3348,16 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                 // Layer 110 is the loading screen's scrolling backdrop: strips at y 168 / 433 / 570 that must stay one picture.
                 // The generic rule anchored each strip to a different edge and flattened it, leaving gaps between them.
                 // They keep their height (as on a stretched 16:9 canvas), so nothing moves vertically.
+                // (Only in the loading screen's pass: mid-hunt the bowgun's and the Palico boomerang's reticle and the
+                // lock-on markers use layer 110 too, and kept the stretched canvas's height: a round reticle came out 11%
+                // taller than wide at 16:10. Those mark points of the 3D picture, so they scale about the centre below.)
                 bool loading_strip = false;
                 if (fabsf(pos_z - 110.0f) < 0.5f) {
-                    sy = 1.0f;
                     // (only the strips: the lock-on markers and other effects use layer 110 too, mid-hunt, and made
                     // everything after them center-anchored, so the HUD jumped down)
                     loading_strip = fabsf(pos_y - 168.0f) < 0.3f || fabsf(pos_y - 433.0f) < 0.3f || fabsf(pos_y - 570.0f) < 0.3f;
                     if (loading_strip) ui_loading_pass = true;
+                    if (ui_loading_pass) sy = 1.0f;
                 }
                 // Front-end screens keep their backdrop 16:9: the HUD stays on it as with the 16:9 anchor. Edges / 21:9 / 32:9
                 // took their centred menus (layer 100, x 640, anchored Right) and the help box (96) off it, to the sides.
@@ -3199,7 +3417,7 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                         }
                         // The Quest Complete banner's lower border slides in from y 739: it belongs to the bottom edge.
                         vanchor = pos_y > 650.0f ? V_BOTTOM : V_TOP;
-                        if (fabsf(pos_z - 97.0f) < 0.5f) ui_menu_pass = true;
+                        if (fabsf(pos_z - 97.0f) < 0.5f) ui_menu_pass = true, ui_menu_frame = g_present_count;
                         // The Quest Complete stamp is one picture, after its borders (x 640, by the top and bottom edges; the
                         // lower one slides in from y 739). Right / Left by place split it on a wide picture, its tilted
                         // "QUEST" (x -17) left of the rest.
@@ -3220,7 +3438,10 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                         // 103.0: In-hunt Status HUD & Item Selector
                         // Status HUD (Clock, HP bar, Stamina, gauges, palico status: y < 500) -> Left anchor
                         // Item Selector wheel (y >= 500) -> Right anchor
-                        if (pos_y < 500.0f) {
+                        // The bowgun's ammo list (held L) stands over the item bar, x 970..1242, y 360..568: by height it was
+                        // split at 500, its upper rows Left / Top, a gap in the middle. The status HUD ends at x 742, so the
+                        // right side (x >= 900) is the item bar's whatever its height.
+                        if (pos_y < 500.0f && pos_x < 900.0f) {
                             anchor = ANCHOR_LEFT;
                             vanchor = V_TOP;
                         } else {
@@ -3265,6 +3486,18 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                     // frame's lower edge slid away from it. All of it but the header and prompts (below y 600) goes top.
                     if (fabsf(pos_z - 105.0f) < 0.5f && pos_x == 215.0f && pos_y == 0.0f) ui_meownster_pass = true;
                     if (ui_meownster_pass && pos_z > 97.5f && pos_z < 105.5f) vanchor = pos_y > 600.0f ? V_BOTTOM : V_TOP;
+                    // Layer 110 outside the loading screen (the bowgun's reticle, lock-on markers) marks points of the 3D
+                    // picture, which at 16:10 (Vert+: 16:9's width, more height about the centre) is the 16:9 one scaled
+                    // about the centre: so are they, or they leave the point they mark (the fallback's thirds moved one at
+                    // y 150 to 135 instead of 171).
+                    if (fabsf(pos_z - 110.0f) < 0.5f && !ui_loading_pass) vanchor = V_CENTER;
+                    // A model preview's window (layer 100: its frame, placed by a corner just outside the box, and the
+                    // prompts just under it) goes as the preview does: the Palico Scout's frame went Top with the target
+                    // cam's rule and its "Rotate" Bottom, below the frame; the Smithy's and the Poogie costume's go Top
+                    // beside the menus (ui_preview_map).
+                    if (sy < 1.0f && ui_pv_v >= 0 && ui_pv_present + 2 >= g_present_count && fabsf(pos_z - 100.0f) < 0.5f &&
+                        pos_x >= ui_pv_x0 - 60.0f && pos_x <= ui_pv_x1 + 60.0f && pos_y >= ui_pv_y0 - 60.0f && pos_y <= ui_pv_y1 + 40.0f)
+                        vanchor = ui_pv_v == 0 ? V_TOP : ui_pv_v == 2 ? V_BOTTOM : V_CENTER;
                     // The loading backdrop's tiles (x -30, 549, 1128...: one every 579, past 1280) are one picture sideways
                     // too, from the screen's left edge: by place they went Left / Centre / Right, three copies with gaps
                     // between them with Edges / 21:9; centred (or Center), nothing covered the left of the first tile.
@@ -3279,6 +3512,7 @@ static VkDescriptorBufferInfo cbuf_info(int stage, ShaderInfo *si, int k, uint32
                     }
                     int v = vanchor == V_TOP ? 0 : vanchor == V_BOTTOM ? 2 : 1;
                     ui_recent[ui_nrecent % UI_RECENT].x = pos_x, ui_recent[ui_nrecent % UI_RECENT].y = pos_y;
+                    ui_recent[ui_nrecent % UI_RECENT].z = pos_z;
                     ui_recent[ui_nrecent % UI_RECENT].vanchor = (uint8_t)v;
                     ui_recent[ui_nrecent % UI_RECENT].hanchor = (uint8_t)anchor;
                     ui_nrecent++;
@@ -3383,8 +3617,13 @@ static VkDescriptorSet stage_set(int nbinds, const VkBindingInfo *binds, VkDescr
         } else if (b->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER && b->binding == 18) {  // rscale: no scaling here
             float rs[67][4];
             for (int k = 0; k < 67; k++) rs[k][0] = rs[k][1] = 1, rs[k][2] = rs[k][3] = 0;
-            memset(rs[66], 0xFF, 4);  // [66].x: the front-face mask's all-ones word (translate.c)
+            rs[66][0] = -1;  // [66].x: -1.0, the front-face mask's all ones once converted (translate.c)
             bi[n] = ubo_span(vk_transient_copy(rs, sizeof rs, 256), sizeof rs);
+            w[n].pBufferInfo = &bi[n];
+        } else if (b->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER && b->binding == HDR_PARAMS_BINDING) {  // (hdr.c)
+            float hp[HDR_NPARAMS];
+            vk_hdr_params(hp);
+            bi[n] = ubo_span(vk_transient_copy(hp, sizeof hp, 256), sizeof hp);
             w[n].pBufferInfo = &bi[n];
         } else if (b->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER && b->binding == ALPHA_REF_BUFFER_INDEX) {
             float ref[4] = {st.alpha_ref, 0, 0, 0};
@@ -3602,6 +3841,7 @@ static bool fxaa_311(NvnTexture *src) {
     vkCmdSetScissor(cb, 0, 1, &area);
     vkCmdDraw(cb, 3, 1, 0, 0);
     vkCmdEndRenderPass(cb);
+    gp_mark("  FXAA 3.11");
     ss_forget();
     stat_draws++;
     return true;
@@ -3609,20 +3849,28 @@ static bool fxaa_311(NvnTexture *src) {
 
 // FXAA off (settings): the game's FXAA pass (recognised by its shader) copies its input instead; FXAAMode = 3_11 draws
 // FXAA 3.11 there (fxaa_311).
-#define FXAA_FS_HASH 0x8530ded68f4407dfull
 static void copy_texture(const TexRef *src, const TexRef *dst, uint64_t flags);
 static bool fxaa_skipped(Prog *pr) {
-    if (prog_fs_hash(pr) == FXAA_FS_HASH) aa_pass_frame = g_present_count;  // (menus: full_picture)
+    if (prog_fs_hash(pr) == FXAA_FS_HASH) {
+        aa_pass_frame = g_present_count;  // (menus: full_picture)
+        gp_next_note = " (FXAA)";
+    }
     bool fxaa_311_on = config_live_fxaa() && config_live_fxaa_mode() == FXAA_311;
     if ((config_live_fxaa() && !fxaa_311_on) || prog_fs_hash(pr) != FXAA_FS_HASH || pr->fi->ntex != 1 || !st.rt.ncolor ||
         !st.rt.color[0])
         return false;
     NvnTexture *src = shader_texture_object(1, &pr->fi->tex[0]);
     if (!src || src == st.rt.color[0]) return false;
-    if (fxaa_311_on) return fxaa_311(src);
+    if (fxaa_311_on) {
+        if (!fxaa_311(src)) return false;
+        gp_next_note = "";
+        return true;
+    }
     TexRef s = {.tex = (uint64_t)(uintptr_t)src}, d = {.tex = (uint64_t)(uintptr_t)st.rt.color[0]};
     if (st.rt.has_cview[0]) d.view = st.rt.cview[0], d.has_view = 1;
     copy_texture(&s, &d, 0);
+    gp_mark("  FXAA off: a copy");
+    gp_next_note = "";
     stat_draws++;
     return true;
 }
@@ -3671,6 +3919,37 @@ static void ssao_before_ui_draw(void) {
     }
 }
 
+// The largest of n 16-bit indices, the restart index (skip) left out. Every indexed draw scans its indices to bound its
+// vertex data: 8% of the render thread with the plain loop, and clang doesn't vectorize it.
+static uint32_t max_index16_plain(const uint16_t *s, uint32_t n, uint16_t skip) {
+    uint32_t m = 0;
+    for (uint32_t i = 0; i < n; i++) if (s[i] > m && s[i] != skip) m = s[i];
+    return m;
+}
+#ifdef __x86_64__
+__attribute__((target("avx2"))) static uint32_t max_index16_avx2(const uint16_t *s, uint32_t n, uint16_t skip) {
+    __m256i sk = _mm256_set1_epi16((short)skip), m256 = _mm256_setzero_si256();
+    uint32_t i = 0;
+    for (; i + 16 <= n; i += 16) {
+        __m256i v = _mm256_loadu_si256((const __m256i *)(s + i));
+        m256 = _mm256_max_epu16(m256, _mm256_andnot_si256(_mm256_cmpeq_epi16(v, sk), v));
+    }
+    // (the largest of 8: minpos on the inverted values)
+    __m128i x = _mm_max_epu16(_mm256_castsi256_si128(m256), _mm256_extracti128_si256(m256, 1));
+    uint32_t m = (uint16_t)~_mm_cvtsi128_si32(_mm_minpos_epu16(_mm_xor_si128(x, _mm_set1_epi32(-1))));
+    for (; i < n; i++) if (s[i] > m && s[i] != skip) m = s[i];
+    return m;
+}
+#endif
+static uint32_t max_index16(const uint16_t *s, uint32_t n, uint16_t skip) {
+#ifdef __x86_64__
+    static int avx2 = -1;
+    if (avx2 < 0) { __builtin_cpu_init(); avx2 = __builtin_cpu_supports("avx2") != 0; }
+    if (avx2) return max_index16_avx2(s, n, skip);
+#endif
+    return max_index16_plain(s, n, skip);
+}
+
 static void draw(CmdRec *r, bool indexed) {
     if (!st.program) { stat_skipped++; return; }
     ShaderKey vkey = {0}, fkey = {0};
@@ -3683,6 +3962,24 @@ static void draw(CmdRec *r, bool indexed) {
     Prog *pr = get_program(st.program, &vkey, &fkey);
     if (!pr) { stat_skipped++; return; }
     if (!await_build(&pr->state, pr, 0)) { skip_draw(&stat_skip_prog); return; }
+    FsrDraw fd = {0};
+    if (g_fsr_on || vk_hdr_tracking()) {  // FSR / HDR: the frame's structure (fsr.c, hdr.c)
+        fd = (FsrDraw){.color0 = st.rt.ncolor ? st.rt.color[0] : NULL, .depth = st.rt.depth, .count = (uint32_t)r->x[2],
+                       .depth_write = st.ds[0] && st.ds[1], .vubuf = &st.ubuf[0][0].addr, .nvubuf = 18,
+                       .vp_w = st.viewport[0][2], .vp_h = st.viewport[0][3]};
+        for (int i = 0; i < pr->fi->ntex && fd.ntex < 16; i++) fd.tex[fd.ntex++] = shader_texture_object(1, &pr->fi->tex[i]);
+    }
+    if (vk_hdr_tracking()) {  // HDR: the game's colour grading / bloom add drawn through their HDR variants (hdr.c)
+        int hk = vk_hdr_draw(&fd, prog_fs_hash(pr));
+        if (hk) {
+            fkey.hdr = (uint8_t)hk;
+            Prog *hp = get_program(st.program, &vkey, &fkey);
+            bool ok = hp && await_build(&hp->state, hp, 0);
+            vk_hdr_variant_used(hk, ok, hp ? atomic_load(&hp->state) : -1);
+            if (ok) pr = hp;
+            else fkey.hdr = 0;  // (not built yet: the game's own shader this frame)
+        }
+    }
     if (fxaa_skipped(pr)) return;
     NvnTexture *movie = movie_picture(pr);
     uint32_t mode = (uint32_t)r->x[0];
@@ -3700,13 +3997,7 @@ static void draw(CmdRec *r, bool indexed) {
         }
     }
     ssao_before_ui_draw();
-    if (g_fsr_on) {  // FSR: the frame's structure; at the start of the HUD FSR runs before this draw (fsr.c)
-        FsrDraw fd = {.color0 = st.rt.ncolor ? st.rt.color[0] : NULL, .depth = st.rt.depth, .count = (uint32_t)r->x[2],
-                      .depth_write = st.ds[0] && st.ds[1], .vubuf = &st.ubuf[0][0].addr, .nvubuf = 18,
-                      .vp_w = st.viewport[0][2], .vp_h = st.viewport[0][3]};
-        for (int i = 0; i < pr->fi->ntex && fd.ntex < 16; i++) fd.tex[fd.ntex++] = shader_texture_object(1, &pr->fi->tex[i]);
-        vk_fsr_draw(&fd);
-    }
+    if (g_fsr_on) vk_fsr_draw(&fd);  // FSR: at the start of the HUD it runs before this draw (fsr.c)
 
     ms_want_depth = st.ds[0] && st.rt.depth;  // (MSAA, a picture 3D models are drawn into: pass_models)
     if (in_pass && pass_models && !pass_msaa && ms_want_depth && !pass_want_depth) st.rt_dirty = true;
@@ -3833,17 +4124,41 @@ static void draw(CmdRec *r, bool indexed) {
     }
     if (ss_need(SS_BC, !memcmp(ss.bc, st.blend_color, sizeof ss.bc))) { memcpy(ss.bc, st.blend_color, sizeof ss.bc); vkCmdSetBlendConstants(cb, st.blend_color); }
     {
-        float f[3] = {0, 0, 0};
-        if (k.depth_bias) memcpy(f, st.poly_offset, sizeof f);
-        if (ss_need(SS_DB, !memcmp(ss.db, f, sizeof f))) { memcpy(ss.db, f, sizeof f); vkCmdSetDepthBias(cb, f[1], f[2], f[0]); }
+        // (f[3]: D24 steps on a D32S8, VK_EXT_depth_bias_control: a float format's steps follow each triangle's depth
+        // and can be finer than D24's, too small for the game's decal offsets)
+        float f[4] = {0, 0, 0, 0};
+        if (k.depth_bias) memcpy(f, st.poly_offset, 3 * sizeof *f);
+        bool d24 = k.depth_bias && pass_d24_as_float && g_vk.set_depth_bias2;
+        f[3] = d24;
+        if (ss_need(SS_DB, !memcmp(ss.db, f, sizeof f))) {
+            memcpy(ss.db, f, sizeof f);
+#ifdef VK_EXT_depth_bias_control
+            if (d24) {
+                VkDepthBiasRepresentationInfoEXT rep = {
+                    .sType = VK_STRUCTURE_TYPE_DEPTH_BIAS_REPRESENTATION_INFO_EXT,
+                    .depthBiasRepresentation = VK_DEPTH_BIAS_REPRESENTATION_LEAST_REPRESENTABLE_VALUE_FORCE_UNORM_EXT};
+                VkDepthBiasInfoEXT bi = {.sType = VK_STRUCTURE_TYPE_DEPTH_BIAS_INFO_EXT, .pNext = &rep,
+                                         .depthBiasConstantFactor = f[1], .depthBiasClamp = f[2], .depthBiasSlopeFactor = f[0]};
+                g_vk.set_depth_bias2(cb, &bi);
+            } else
+#endif
+                vkCmdSetDepthBias(cb, f[1], f[2], f[0]);
+        }
     }
     float *vp = st.viewport[0], movie_vp[4], v[4];
     PreviewMap pm;
     if (movie && movie_viewport(movie, vp, movie_vp)) vp = movie_vp;
     memcpy(v, vp, sizeof v);
-    if (vp != movie_vp && ui_preview_map(&pm)) {  // (a model preview: the viewport keeps its size, its centre moves)
-        v[0] = pm.sx + (vp[0] + vp[2] * 0.5f) * pm.kx - vp[2] * 0.5f;
-        v[1] = pm.sy + (vp[1] + vp[3] * 0.5f) * pm.ky - vp[3] * 0.5f;
+    if (vp != movie_vp && ui_preview_map(&pm)) {  // (a model preview: its centre moves with its window)
+        // On a narrower picture (16:10) the game's viewport is its 16:9 one stretched to the taller picture, and so is
+        // the model's camera (made for the viewport's shape): the model came out 1 / ky times too big for its frame
+        // (flattened by ky), and its scissor cut it. config.c camera_aspect gives that camera the 16:9 shape, and the
+        // viewport its 16:9 height: the model as big and with as much room to the sides as at 16:9. Until the camera has
+        // it (the first frame), the viewport shrinks by ky both ways instead: the right size, narrower.
+        if (pm.ky < 1.0f && g_preview_cam_present + 2 >= g_present_count) v[3] = vp[3] * pm.ky;
+        else if (pm.ky < 1.0f) v[2] = vp[2] * pm.ky, v[3] = vp[3] * pm.ky;
+        v[0] = pm.sx + (vp[0] + vp[2] * 0.5f) * pm.kx - v[2] * 0.5f;
+        v[1] = pm.sy + (vp[1] + vp[3] * 0.5f) * pm.ky - v[3] * 0.5f;
     }
     set_viewport(cb, v[0] * pass_sx, v[1] * pass_sy, v[2] * pass_sx, v[3] * pass_sy, st.depth_range[0][0],
                  st.depth_range[0][1]);  // (FSR: pass_s* scale onto output-size stand-ins, else 1)
@@ -3887,7 +4202,7 @@ static void draw(CmdRec *r, bool indexed) {
             itype_vk = itype == 1 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
             icount = count;
             ib = vk_transient_copy(src, (uint64_t)count * isz + 4, 4);
-            if (isz == 2) { const uint16_t *s = src; for (uint32_t i = 0; i < count; i++) if (s[i] > max_index && s[i] != (uint16_t)restart) max_index = s[i]; }
+            if (isz == 2) max_index = max_index16(src, count, (uint16_t)restart);
             else { const uint32_t *s = src; for (uint32_t i = 0; i < count; i++) if (s[i] > max_index && s[i] != restart) max_index = s[i]; }
         } else if (native) {  // 8-bit indices: widened to 16
             ib = vk_transient((uint64_t)count * 2 + 4, 4);
@@ -4113,6 +4428,7 @@ static void copy_buffer_to_texture(uint64_t src, const TexRef *dst) {
             const uint8_t *sr = (const uint8_t *)G2H((uint32_t)(src + (uint64_t)z * img + (uint64_t)y * row));
             uint8_t *dr = (uint8_t *)s.ptr + ((uint64_t)z * hb + y) * out_row;
             if (out_bpb == fi->bpb) memcpy(dr, sr, out_row);
+            else if (b->wide == WIDE_FLOAT16) for (uint32_t x = 0; x < wb * 4; x++) ((uint16_t *)dr)[x] = unorm8_to_half(sr[x]);
             else if (b->wide) for (uint32_t x = 0; x < wb * 4; x++) ((uint16_t *)dr)[x] = (uint16_t)(sr[x] * 257);
             else for (uint32_t x = 0; x < wb; x++) { memcpy(dr + x * 4, sr + x * 3, 3); dr[x * 4 + 3] = 255; }
         }
@@ -4156,7 +4472,13 @@ static void copy_texture_to_buffer(const TexRef *src, uint64_t dst) {
     vkCmdCopyImageToBuffer(cb, b->image, VK_IMAGE_LAYOUT_GENERAL, out.buf, 1, &c);
     renderer_submit();  // the CPU may read the result right after the fence
     vk_wait_seq(submit_seq);
-    if (b->wide) {
+    if (b->wide == WIDE_FLOAT16) {  // (HDR: values above 1 clamp, as the game's RGBA8 would have)
+        uint8_t *d = (uint8_t *)G2H((uint32_t)dst);
+        for (uint64_t i = 0; i < total; i++) {
+            float f = half_to_float(((const uint16_t *)out.ptr)[i]);
+            d[i] = (uint8_t)(f <= 0.0f || f != f ? 0 : f >= 1.0f ? 255 : (int)(f * 255.0f + 0.5f));
+        }
+    } else if (b->wide) {
         uint8_t *d = (uint8_t *)G2H((uint32_t)dst);
         for (uint64_t i = 0; i < total; i++) d[i] = (uint8_t)((((const uint16_t *)out.ptr)[i] + 128) / 257);
     } else memcpy(G2H((uint32_t)dst), out.ptr, total);
@@ -4355,11 +4677,15 @@ void vk_present_depth_forget(NvnTexture *t) {
     if (present_scene_color == t) present_scene_color = NULL;
 }
 
-static VkPipeline present_pipeline(void) {
-    static VkPipeline p;
-    static VkRenderPass made_for;
+// hdr: the HDR picture from a graded frame (BT.2020, hdr.c) into the composition image as BT.709 (signed: colours
+// outside BT.709 kept), where the overlay is drawn over it in BT.709
+static VkPipeline present_pipeline(bool hdr) {
+    static VkPipeline pp[2];
+    static VkRenderPass made[2];
     VkRenderPass rp = vk_window_pass();
-    if (p && made_for == rp) return p;
+    if (pp[hdr] && made[hdr] == rp) return pp[hdr];
+    VkPipeline *p = &pp[hdr];
+    VkRenderPass *made_for = &made[hdr];
     if (!present_layout) {
         VkDescriptorSetLayoutBinding b[2] = {
             {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, NULL},
@@ -4375,7 +4701,7 @@ static VkPipeline present_pipeline(void) {
         {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_VERTEX_BIT,
          .module = vk_builtin_shader("present.vert"), .pName = "main"},
         {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-         .module = vk_builtin_shader("present.frag"), .pName = "main"}};
+         .module = vk_builtin_shader(hdr ? "present.frag.hdr" : "present.frag"), .pName = "main"}};
     VkPipelineVertexInputStateCreateInfo vi = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
     VkPipelineInputAssemblyStateCreateInfo ia = {.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
                                                  .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
@@ -4394,9 +4720,9 @@ static VkPipeline present_pipeline(void) {
                                        .pStages = stages, .pVertexInputState = &vi, .pInputAssemblyState = &ia, .pViewportState = &vs,
                                        .pRasterizationState = &rs, .pMultisampleState = &ms, .pDepthStencilState = &ds,
                                        .pColorBlendState = &cb, .pDynamicState = &dy, .layout = present_layout, .renderPass = rp};
-    VK_CHECK(vkCreateGraphicsPipelines(g_vk.dev, g_vk.pcache, 1, &pi, NULL, &p));
-    made_for = rp;
-    return p;
+    VK_CHECK(vkCreateGraphicsPipelines(g_vk.dev, g_vk.pcache, 1, &pi, NULL, p));
+    *made_for = rp;
+    return *p;
 }
 
 // Scanout shows the bytes the game wrote: sRGB images are read through a UNORM view (no decode).
@@ -4411,7 +4737,8 @@ static VkImageView raw_view(TexBackend *b) {
 void vk_present_draw(VkCommandBuffer cb, TexBackend *b, VkImageView depth, float vx, float vy, float vw, float vh,
                      float near_plane, float far_plane) {
     if (!b || !b->image || (b->aspect & ~VK_IMAGE_ASPECT_COLOR_BIT)) return;
-    VkPipeline p = present_pipeline();
+    bool hdr = vk_hdr_presented_bt2020();
+    VkPipeline p = present_pipeline(hdr);
     VkDescriptorSet ds = vk_alloc_set(present_set_layout);
     VkDescriptorImageInfo ii[2] = {
         {vk_default_sampler(true), raw_view(b), VK_IMAGE_LAYOUT_GENERAL},
@@ -4427,8 +4754,9 @@ void vk_present_draw(VkCommandBuffer cb, TexBackend *b, VkImageView depth, float
     VkViewport vp = {vx, vy, vw, vh, 0, 1};
     vkCmdSetViewport(cb, 0, 1, &vp);
     float pv[12] = {nvn_window_origin() == 0 ? 1.0f : 0.0f, 0, 0, 0, 0, 0, 1, 1,
-                    depth && g_config.ssao ? 1.0f : 0.0f, near_plane, far_plane, 50.0f};
-    vkCmdPushConstants(cb, present_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof pv, pv);
+                    hdr ? vk_hdr_gamma() : (depth && g_config.ssao ? 1.0f : 0.0f),
+                    hdr ? 0.0f : near_plane, hdr ? 0.0f : far_plane, hdr ? 0.0f : 50.0f};
+    vkCmdPushConstants(cb, present_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 48, pv);
     vkCmdDraw(cb, 3, 1, 0, 0);
 }
 
@@ -4526,7 +4854,9 @@ static void exec_list(uint64_t handle, int depth) {
         case CMD_SET_PRIMITIVE_RESTART: st.prim_restart = r->x[0] != 0; st.restart_index = (uint32_t)r->x[1]; break;
         case CMD_SET_DEPTH_CLAMP:
             st.depth_clamp = r->x[0] != 0;
-            if (getenv("MHGU_DUMP_VERBOSE")) {
+            static int dump_verbose = -1;  // (once: getenv here, for each of these commands, was 6% of the render thread)
+            if (dump_verbose < 0) dump_verbose = getenv("MHGU_DUMP_VERBOSE") != NULL;
+            if (dump_verbose) {
                 static int n, last = -1;
                 if (st.depth_clamp != last && n++ < 20) LOG("[vk] depth clamp -> %d\n", st.depth_clamp);
                 last = st.depth_clamp;
@@ -4595,7 +4925,7 @@ static void exec_list(uint64_t handle, int depth) {
             }
             if (!r->x[1] || !guest_range_ok(r->x[1], 16)) break;
             uint64_t now = plat_now_ns();
-            uint64_t ticks = (uint64_t)((unsigned __int128)now * 384 / 625);
+            uint64_t ticks = now / 625 * 384 + now % 625 * 384 / 625;
             ST64((uint32_t)r->x[1], 0);
             ST64((uint32_t)r->x[1] + 8, ticks);
             break;

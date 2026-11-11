@@ -293,7 +293,7 @@ static void create_image(NvnTexture *t, TexBackend *b) {
             vf = VK_FORMAT_R8G8B8A8_UNORM;
         }
     }
-    if (b->wide) vf = VK_FORMAT_R16G16B16A16_UNORM;
+    if (b->wide) vf = vk_wide_format(b->wide);
     bool depthfmt = renderer_format_is_depth(t->format);
     VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     if (depthfmt) usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
@@ -607,29 +607,32 @@ TexBackend *vk_tex(NvnTexture *t, bool for_render) {
     if (b->pending_rgba) upload_pending(b);
     if (for_render) b->gpu_owned = true;
     else if (!b->gpu_owned) {
+        // (timed for MHGU_VK_STATS only: this runs for every texture of every draw)
+        static int stats = -1;
+        if (stats < 0) stats = getenv("MHGU_VK_STATS") != NULL;
         extern uint64_t stat_upload_ns;
-        uint64_t t0 = plat_now_ns();
+        uint64_t t0 = stats ? plat_now_ns() : 0;
         upload_texture(t, b);
-        stat_upload_ns += plat_now_ns() - t0;
+        if (stats) stat_upload_ns += plat_now_ns() - t0;
     }
     return b;
 }
 
 // (exec.c begin_pass, outside a render pass, before t is rendered to) An RGBA8 2D target re-made wide or back to
 // RGBA8 (SmoothGradients turned off, or it turns out to be FSR's input), its contents blitted over.
-void vk_rt_widen(NvnTexture *t, bool on) {
+void vk_rt_widen(NvnTexture *t, int on) {
     if (t->format != 0x25 || t->target != 1) return;
     TexBackend *b = tex_backend(t);
-    if (b->wide == on || b->format != (b->wide ? VK_FORMAT_R16G16B16A16_UNORM : VK_FORMAT_R8G8B8A8_UNORM)) return;
+    if (b->wide == on || b->format != vk_wide_format(b->wide)) return;
     if (b->pending_rgba) upload_pending(b);
     vk_ms_resolve(b);
     if (b->ms) { destroy_image(b->ms); free(b->ms); b->ms = NULL; }
     b->ms_valid = b->ms_dirty = false;
     views_forget(b);
     TexBackend old = *b;
-    b->wide = on;
+    b->wide = (uint8_t)on;
     create_image(t, b);
-    b->wide = b->format == VK_FORMAT_R16G16B16A16_UNORM;  // (creation failed: RGBA8 after all)
+    if (b->format != vk_wide_format(on)) b->wide = WIDE_NONE;  // (creation failed: RGBA8 after all)
     VkCommandBuffer cb = vk_cmd();
     vk_full_barrier(cb);
     VkImageBlit r[16];
@@ -643,7 +646,9 @@ void vk_rt_widen(NvnTexture *t, bool on) {
     vk_full_barrier(cb);
     defer((Dead){.img = old.image, .mem = old.mem});
     static int nlog;
-    if (nlog++ < 40) LOG("[vk] render target %ux%u (%u levels) %s\n", b->width, b->height, b->levels, b->wide ? "wide" : "RGBA8");
+    if (nlog++ < 40)
+        LOG("[vk] render target %ux%u (%u levels) %s\n", b->width, b->height, b->levels,
+            b->wide == WIDE_FLOAT16 ? "RGBA16F (HDR)" : b->wide ? "wide" : "RGBA8");
 }
 
 void renderer_mark_gpu_owned(NvnTexture *t) { tex_backend(t)->gpu_owned = true; }
@@ -835,7 +840,7 @@ VkSampler vk_sampler(NvnSamplerDesc *d) {
         switch (d->wrap[i]) {
         case 0: case 7: modes[i] = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE; break;
         case 1: modes[i] = VK_SAMPLER_ADDRESS_MODE_REPEAT; break;
-        case 2: case 3: modes[i] = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE; break;
+        case 2: case 3: modes[i] = g_vk.no_mirror_clamp ? VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT : VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE; break;
         case 4: case 5: modes[i] = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER; border = true; break;
         case 6: modes[i] = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT; break;
         default: modes[i] = VK_SAMPLER_ADDRESS_MODE_REPEAT;

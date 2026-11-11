@@ -33,6 +33,8 @@
 #include "hle/input.h"
 #include "hle/itembar.h"
 #include "hle/mousecam.h"
+#include "keymap.h"
+#include "mods.h"
 #include "overlay.h"
 #include "rt.h"
 #include "textinput.h"
@@ -98,6 +100,85 @@ static float mouse_dx, mouse_dy;  // counts moved since the last update
 // (tests: the control file's "mousemove <x> <y> <ms>", a mouse moving at that many counts a second, captured or not)
 static float test_vx, test_vy;
 static uint64_t test_until;
+
+// ---- the mouse for mods (runtime/forge.c: forge_input_getMouse, getMouseMove, setMouseFree, the port's own calls):
+// where the pointer last moved in the window and whether it is over it, the buttons held and pressed since the last
+// take, and all the movement since then, wherever it went (the hunt camera, the right stick, the free pointer). Kept
+// from every mouse event, also those Forge's menu or the chat box takes (forge.c leaves those times out), on this
+// thread; taken on the game's. A mod can make the mouse free for a pointer of its own (mods_free): it isn't captured
+// then (let go if it was, captured again after if the player had clicked in), and a click is only the mod's: not a
+// capture, not a button the game sees.
+static SDL_SpinLock mods_lock;
+static struct { float x, y, dx, dy; bool inside; uint32_t held, pressed; } mods_mouse;
+static SDL_AtomicInt mods_free;
+
+static int wheel_notches(const SDL_Event *e) {  // (> 0: up)
+    return e->wheel.integer_y * (e->wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1 : 1);
+}
+
+static void mods_mouse_event(const SDL_Event *e) {
+    SDL_LockSpinlock(&mods_lock);
+    switch (e->type) {
+    case SDL_EVENT_MOUSE_MOTION:  // (SDL sends it over the window, or captured)
+        mods_mouse.x = e->motion.x, mods_mouse.y = e->motion.y, mods_mouse.inside = true;
+        mods_mouse.dx += e->motion.xrel, mods_mouse.dy += e->motion.yrel;
+        break;
+    case SDL_EVENT_MOUSE_BUTTON_DOWN: case SDL_EVENT_MOUSE_BUTTON_UP:
+        if (e->button.button >= 1 && e->button.button <= SDL_BUTTON_X2) {
+            uint32_t b = SDL_BUTTON_MASK(e->button.button);
+            if (e->button.down) mods_mouse.held |= b, mods_mouse.pressed |= b;
+            else mods_mouse.held &= ~b;
+        }
+        break;
+    case SDL_EVENT_WINDOW_MOUSE_ENTER: case SDL_EVENT_WINDOW_MOUSE_LEAVE:
+        mods_mouse.inside = e->type == SDL_EVENT_WINDOW_MOUSE_ENTER;
+        break;
+    case SDL_EVENT_WINDOW_FOCUS_LOST:
+        mods_mouse.held = 0;
+        break;
+    }
+    SDL_UnlockSpinlock(&mods_lock);
+}
+
+void host_input_mouse_take(HostMouse *out) {
+    SDL_LockSpinlock(&mods_lock);
+    out->x = mods_mouse.x, out->y = mods_mouse.y, out->inside = mods_mouse.inside;
+    out->buttons = mods_mouse.held | mods_mouse.pressed;  // (a click shorter than a frame is seen once)
+    out->dx = mods_mouse.dx, out->dy = mods_mouse.dy;
+    mods_mouse.pressed = 0, mods_mouse.dx = mods_mouse.dy = 0;
+    SDL_UnlockSpinlock(&mods_lock);
+}
+
+// ---- the key pressed, for a mod's own keybind menu (forge_input_getKeyPressed): the first key, mouse button or wheel
+// notch since the last take, as [Keybinds] codes it, whoever took it. Not the port's own keys (keymap.h), which a row
+// can't have, but Esc: to cancel with, as the settings menu does.
+static SDL_AtomicInt mods_key;
+
+static void mods_key_event(const SDL_Event *e) {
+    int code = 0;
+    switch (e->type) {
+    case SDL_EVENT_KEY_DOWN:
+        if (!e->key.repeat && e->key.scancode < SDL_SCANCODE_COUNT) code = (int)e->key.scancode;
+        break;
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        if (e->button.button >= 1 && e->button.button <= SDL_BUTTON_X2) code = KEY_MOUSE + e->button.button;
+        break;
+    case SDL_EVENT_MOUSE_WHEEL: {
+        int n = wheel_notches(e);
+        if (n) code = n > 0 ? KEY_WHEEL_UP : KEY_WHEEL_DOWN;
+        break;
+    }
+    }
+    if (code && (code == SDL_SCANCODE_ESCAPE || !key_reserved(code))) SDL_CompareAndSwapAtomicInt(&mods_key, 0, code);
+}
+
+int host_input_key_take(void) { return SDL_SetAtomicInt(&mods_key, 0); }
+
+void host_input_set_mouse_free(bool free) {
+    if (SDL_SetAtomicInt(&mods_free, free) != free) LOG("[input] %s\n", free ? "the mouse is free for a mod" : "the mouse is the game's again");
+}
+
+bool host_input_mouse_free(void) { return SDL_GetAtomicInt(&mods_free) != 0; }
 
 // ---- scripted input
 typedef struct { uint64_t start, len; uint64_t buttons; int stick, x, y; } ScriptStep;
@@ -165,6 +246,8 @@ static void script_parse(void) {
 //                          frame (shots/pass_*.png), or of the next n frames (shots/f<i>_pass_*.png for i >= 1)
 //   hudtrace               log every HUD quad of the next frame: its layer, place, and where 16:10 / ultrawide moved it
 //   frame                  log the current frame number
+//   fps <n>                (debug) the frame rate target from now on, 30..240 (not saved)
+//   dummy <cm> <degrees>   (debug, MHGU_DUMMY) the held monster's distance and its heading from the hunter's
 //   type <text>            type into the game's text entry (runtime/textinput.c); textkey enter|escape|backspace
 //   mousemove <x> <y> <ms> mouse look as if the mouse moved at that many counts a second (y down) for that long
 //   wheel <notches>        the mouse wheel turned that far (> 0 up; by default the item bar to the left)
@@ -435,6 +518,11 @@ static void control_poll(void) {
                 snprintf(g_shot_request, sizeof g_shot_request, "shots/%s.png", arg[0] ? arg : "control");
             } else if (!strcmp(cmd, "frame")) {
                 LOG("[control] frame %llu\n", (unsigned long long)g_present_count);
+            } else if (!strcmp(cmd, "fps")) {
+                config_set_live_fps(strtof(arg, NULL));
+                LOG("[control] frame rate target %.0f\n", (double)config_live_fps());
+            } else if (!strcmp(cmd, "dummy")) {
+                dummy_set(strtof(arg, NULL), strtof(arg2, NULL));
             } else {
                 unsigned long n = arg[0] ? strtoul(arg, NULL, 10) : 8, delay = strtoul(arg2, NULL, 10);
                 uint64_t at = g_present_count + 1 + delay;
@@ -551,6 +639,8 @@ static bool chat_mouse(const SDL_Event *e) {
 
 void host_input_event(const SDL_Event *e) {
     if (e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) pad_pressed(e->gbutton.which);
+    mods_mouse_event(e);  // (the mouse for mods: every event, whoever takes it)
+    mods_key_event(e);
     if (overlay_event(e)) return;  // (Forge's menu open: keyboard and mouse are its)
     if (chat_mouse(e)) return;  // (typing a line of chat: the mouse drags its box)
     if (textinput_event(e)) return;  // (typing into a text entry: not controller buttons)
@@ -602,7 +692,7 @@ void host_input_event(const SDL_Event *e) {
         if (mouse_captured) mouse_dx += e->motion.xrel, mouse_dy += e->motion.yrel;
         break;
     case SDL_EVENT_MOUSE_WHEEL: {  // (what [Keybinds] says: by default the item bar)
-        int n = e->wheel.integer_y * (e->wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -1 : 1);
+        int n = wheel_notches(e);
         if (mouse_captured && n) wheel_turn(n);
         break;
     }
@@ -611,6 +701,8 @@ void host_input_event(const SDL_Event *e) {
         if (btn < 1 || btn > SDL_BUTTON_X2) break;
         if (!e->button.down) {
             mouse_held &= ~(1u << btn);
+        } else if (host_input_mouse_free()) {
+            break;  // (a mod's free pointer: the click is the mod's only)
         } else if (!mouse_captured && !mouse_no_capture) {  // (the click that captures the mouse is not a button press)
             if (!mouse_grab) LOG("[input] capturing the mouse\n");
             mouse_grab = true;
@@ -642,7 +734,8 @@ static int32_t clamp_axis(int v) { return v < -32767 ? -32767 : v > 32767 ? 3276
 
 // Capture or release the mouse as wanted, and give its movement to the hunt camera or the right stick.
 static void mouse_update(int *rx, int *ry) {
-    bool want = mouse_grab && !overlay_menu_open() && !chat_active();  // (Forge's menu, the chat box: the pointer is theirs)
+    // (Forge's menu, the chat box, a mod's free pointer: the pointer is theirs)
+    bool want = mouse_grab && !overlay_menu_open() && !chat_active() && !host_input_mouse_free();
     SDL_Window *w = ui_window();
     if (want != mouse_captured && w) {
         if (SDL_SetWindowRelativeMouseMode(w, want) || !want) {
@@ -653,11 +746,13 @@ static void mouse_update(int *rx, int *ry) {
         }
         mouse_dx = mouse_dy = 0;
     }
-    static bool chat_pointer;  // (full screen hides the pointer: shown while the chat box can be dragged)
-    if (chat_active() != chat_pointer && w) {
-        chat_pointer = chat_active();
-        if (chat_pointer) SDL_ShowCursor();
-        else if (SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) SDL_HideCursor();
+    // (full screen hides the pointer: shown while the chat box can be dragged or a mod has the mouse free)
+    static bool pointer_shown;
+    bool show = chat_active() || host_input_mouse_free();
+    if (show != pointer_shown && w) {
+        pointer_shown = show;
+        if (show) SDL_ShowCursor();
+        else if ((SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) && !overlay_menu_open()) SDL_HideCursor();
     }
     static uint64_t last;
     static float vx, vy;  // the speed, smoothed: counts a second
@@ -665,7 +760,12 @@ static void mouse_update(int *rx, int *ry) {
     float dt = last ? (float)(now - last) * 1e-9f : 0.0f;
     last = now;
     if (dt > 0.1f) dt = 0.1f;
-    if (now < test_until) mouse_dx += test_vx * dt, mouse_dy += test_vy * dt;
+    if (now < test_until) {
+        mouse_dx += test_vx * dt, mouse_dy += test_vy * dt;
+        SDL_LockSpinlock(&mods_lock);  // (mods see it too)
+        mods_mouse.dx += test_vx * dt, mods_mouse.dy += test_vy * dt;
+        SDL_UnlockSpinlock(&mods_lock);
+    }
     if (mousecam_active()) {  // (the hunt camera turns by the counts themselves)
         if (mouse_dx != 0 || mouse_dy != 0) mousecam_add(mouse_dx, mouse_dy);
         mouse_dx = mouse_dy = vx = vy = 0;
@@ -685,26 +785,45 @@ static void mouse_update(int *rx, int *ry) {
     *rx += (int)(x * t * 32767.0f), *ry += (int)(y * t * 32767.0f);
 }
 
-// The game's rumble (input_rumble) to the controller: on a change, at most every 16 ms (the game sends a value every
-// 5 ms, and a DualSense over Bluetooth takes a packet per call), renewed while it lasts, stopped at once.
+// The game's rumble (input_rumble) to the controller. It starts and stops at once; in between a new strength goes out
+// only when a motor moved by RUMBLE_STEP, at most every RUMBLE_CHANGE_NS (twice that on a wireless controller). The
+// game sends a value every 5 ms and a roar's changes nearly every time, while each new strength is an output report
+// that SDL's rumble thread writes holding the controller (HIDAPI: DualSense, DualShock 4...): its input is not read
+// meanwhile, and a Bluetooth write is slow. A new strength every 16 ms left the sticks stale and lost button presses
+// for the whole roar. Renewed while it lasts with the strength last sent (SDL sends no report for the same strength:
+// only its stop time moves).
+#define RUMBLE_STEP 0x0C00            // (of 0xFFFF: ~5%; the DualSense's motors take 8 bits)
+#define RUMBLE_CHANGE_NS 50000000ull
 static void rumble_update(void) {
-    static uint32_t sent, peak;
+    static uint32_t sent, peak, sends;
     static uint64_t sent_ns, on_ns;
     static SDL_Gamepad *sent_pad;
+    static bool wireless;
     uint32_t v = g_config.controller_rumble ? input_rumble() : 0;
     uint64_t now = plat_now_ns();
-    if (v && !on_ns) on_ns = now, peak = 0;  // (the log: each rumble's length and strongest motor values)
+    if (v && !on_ns) on_ns = now, peak = 0, sends = 0;  // (the log: each rumble's length, strongest motor values, reports)
     if (v) peak = ((v >> 16) > (peak >> 16) ? v & 0xFFFF0000u : peak & 0xFFFF0000u) | ((v & 0xFFFF) > (peak & 0xFFFF) ? v & 0xFFFF : peak & 0xFFFF);
     if (!v && on_ns) {
-        LOG("[input] rumble %.0f ms, low %u high %u%s\n", (now - on_ns) / 1e6, peak >> 16, peak & 0xFFFF, pad ? "" : " (no controller)");
+        LOG("[input] rumble %.0f ms, low %u high %u, %u strength(s) sent%s\n", (now - on_ns) / 1e6, peak >> 16, peak & 0xFFFF,
+            sends, pad ? (wireless ? " (wireless)" : "") : " (no controller)");
         on_ns = 0;
     }
     if (!pad) { sent_pad = NULL; return; }
-    if (pad != sent_pad) sent = 0, sent_pad = pad;
-    bool change = v != sent && (v == 0 || now - sent_ns >= 16000000ull), renew = v && now - sent_ns >= 100000000ull;
+    if (pad != sent_pad)
+        sent = 0, sent_pad = pad, wireless = SDL_GetGamepadConnectionState(pad) == SDL_JOYSTICK_CONNECTION_WIRELESS;
+    bool change;
+    if (!v || !sent) {
+        change = v != sent;  // (start, stop)
+    } else {
+        int dl = abs((int)(v >> 16) - (int)(sent >> 16)), dh = abs((int)(v & 0xFFFF) - (int)(sent & 0xFFFF));
+        change = (dl >= RUMBLE_STEP || dh >= RUMBLE_STEP) && now - sent_ns >= RUMBLE_CHANGE_NS * (wireless ? 2 : 1);
+    }
+    bool renew = v && now - sent_ns >= 100000000ull;
     if (!change && !renew) return;
-    SDL_RumbleGamepad(pad, (Uint16)(v >> 16), (Uint16)v, v ? 200 : 0);
-    sent = v, sent_ns = now;
+    uint32_t out = change ? v : sent;
+    SDL_RumbleGamepad(pad, (Uint16)(out >> 16), (Uint16)out, out ? 200 : 0);
+    if (change && v) sends++;
+    sent = out, sent_ns = now;
 }
 
 void host_input_update(void) {
@@ -823,8 +942,8 @@ void host_input_update(void) {
 
     // A controller can reach host settings without needing a keyboard.
     static bool settings_chord;
-    bool chord = (b & (B(BTN_PLUS) | B(BTN_MINUS))) == (B(BTN_PLUS) | B(BTN_MINUS));
-    if (chord && !settings_chord && !typing) overlay_toggle_settings();
+    bool chord = config_menu_chord() && (b & (B(BTN_PLUS) | B(BTN_MINUS))) == (B(BTN_PLUS) | B(BTN_MINUS));
+    if (chord && !settings_chord && !typing) overlay_menu_chord();
     if (chord && !typing) settings_chord = true;
     if (settings_chord) {
         // Swallow releases as well: releasing one half must not activate the game's menu.

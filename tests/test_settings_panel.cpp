@@ -18,13 +18,26 @@
 #include <string>
 static int requested;
 extern "C" const char *g_game_dir = "obj/settings-test/game";  // (modorder.c compares archives with the game's)
+extern "C" volatile uint64_t g_present_count = 0;  // (runtime/ui.c's frame counter: config.c's model previews read it)
 extern "C" void ui_request_action(bool restart) { requested = restart ? 2 : 1; }
 extern "C" bool ui_action_failed(void) { return false; }
+static int import_requested;
+static const char *picked_folder;  // (what the folder picker "chose": ui_take_picked_folder hands it out once)
+extern "C" void ui_request_import(int what) { import_requested = what; }
+extern "C" int ui_take_picked_folder(char *out, size_t size) {
+    if (!picked_folder) return 0;
+    SDL_strlcpy(out, picked_folder, size);
+    picked_folder = nullptr;
+    return 4;
+}
 extern "C" int ldn_hub_status(const char *, const char *, int *, int *) { return 0; }
 extern "C" void ldn_hub_check(const char *, const char *) {}
+extern "C" bool forge_plugins_have(int) { return false; }  // (no Forge plugins started)
+extern "C" int forge_plugin_titles(const char **, int) { return 0; }
 // (cheats.c: two cheats, a master code and one that can be turned off)
 static bool cheat_on[2] = {true, true};
 extern "C" int cheats_count(void) { return 2; }
+extern "C" void cheats_rescan(void) {}
 extern "C" const char *cheats_name(int i) { return i ? "Test cheat" : "Master"; }
 extern "C" const char *cheats_file(int i) { (void)i; return "test.txt"; }
 extern "C" bool cheats_master(int i) { return i == 0; }
@@ -251,6 +264,25 @@ int main() {
     idle();
     selected("bind.6");
     assert(!settings_panel_mouse(SDL_BUTTON_LEFT));  // (not choosing: a click is the menu's)
+    // The pointer on the capture view's Cancel: a left click is that row's, a side button (Mouse 4) still the key
+    down();
+    selected("bind.7");
+    confirm();
+    selected("choice.0");  // Set key
+    confirm();
+    selected("capture.cancel");
+    {
+        ImGuiWindow *w = ImGui::GetCurrentContext()->NavWindow;
+        ImRect r = ImGui::WindowRectRelToAbs(w, w->NavRectRel[0]);
+        ImGui::GetIO().AddMousePosEvent(r.GetCenter().x, r.GetCenter().y);
+        idle();
+    }
+    assert(!settings_panel_mouse(SDL_BUTTON_LEFT));
+    assert(settings_panel_mouse(SDL_BUTTON_X1));
+    idle();
+    ImGui::GetIO().AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+    idle();
+    selected("bind.7");
     back();
     selected("keybinds");
     assert(settings_panel_dirty());
@@ -259,6 +291,7 @@ int main() {
     selected("save");
     confirm();
     assert(config_live_bind(BIND_B, 0) == SDL_SCANCODE_G && config_live_bind(BIND_B, 1) == SDL_SCANCODE_H);
+    assert(config_live_bind(BIND_X, 0) == KEY_MOUSE + SDL_BUTTON_X1);
     press(ImGuiKey_Home);
     down(4);
     confirm();
@@ -509,7 +542,37 @@ int main() {
     assert(config_live_menu_confirm() == MENU_CONFIRM_ORIGINAL);
     press(ImGuiKey_Home);
     selected("language");
-    down(9);  // (theme, scale, detach, menu.confirm, icons, confirm.exit, updates, bonus, restart)
+    // Save folder (PC): Choose folder opens the system's picker, whose folder lands in the draft; Save keeps it
+    down(8);  // (theme, scale, detach, menu.confirm, icons, confirm.exit, updates, bonus)
+    selected("bonus");
+    down();
+    selected("save.location");
+    down();
+    selected("save.location.pick");
+    confirm();
+    assert(import_requested == 4);
+    picked_folder = "/games/MHGU saves";
+    idle();
+    picked_folder = "/bad;folder";  // (the settings file can't hold it: not taken)
+    idle();
+    down();
+    selected("save.location.reset");  // (enabled now: a folder is set)
+    press(ImGuiKey_End);
+    press(ImGuiKey_GamepadDpadUp);
+    selected("save");
+    confirm();
+    assert(!strcmp(config_editable().save_location, "/games/MHGU saves"));
+    { Config saved = config_editable(); assert(config_restart_required(&saved)); }
+    press(ImGuiKey_Home);
+    down(11);
+    selected("save.location.reset");
+    confirm();
+    press(ImGuiKey_End);
+    press(ImGuiKey_GamepadDpadUp);
+    confirm();
+    assert(!config_editable().save_location[0]);
+    press(ImGuiKey_Home);
+    down(11);  // (Use the default folder: disabled again, skipped)
     selected("restart");
     confirm();
     selected("dialog.cancel");
@@ -575,7 +638,7 @@ int main() {
     press(ImGuiKey_GamepadL1);
     press(ImGuiKey_GamepadL1);
     selected("volume");
-    down(11);  // (mutebg, show.fps, fps, vsync, prewarm, msaa, fxaa, fxaamode, drawdist, smooth, fsr)
+    down(13);  // (mutebg, show.fps, fps, vsync, prewarm, msaa, fxaa, fxaamode, drawdist, smooth, kerning, boldtext, fsr)
     selected("fsr");
     confirm();
     assert(settings_panel_dirty());
