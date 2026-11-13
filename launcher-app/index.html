@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src ipc: http://ipc.localhost">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data: https://images.gamebanana.com; connect-src ipc: http://ipc.localhost">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Monster Hunter Generations Ultimate Recomp</title>
   <link rel="stylesheet" href="styles.css">
@@ -36,6 +36,10 @@
               <span class="button-icon play-icon" aria-hidden="true">▶</span>
               <strong>PLAY</strong>
             </button>
+            <button class="action-button" id="mods-button">
+              <span class="button-icon mods-icon" aria-hidden="true">▤</span>
+              <strong>MODS</strong>
+            </button>
             <button class="action-button" id="settings-button">
               <span class="button-icon settings-icon" aria-hidden="true">⚙</span>
               <strong>SETTINGS</strong>
@@ -46,6 +50,28 @@
             </button>
             <p class="build-status" id="build-status" hidden><i></i><span id="build-status-text"></span></p>
           </aside>
+        </div>
+      </section>
+
+      <section class="screen mods-screen" id="mods-screen" hidden>
+        <div class="mods-heading">
+          <button class="back-button" id="mods-back-button"><span aria-hidden="true">←</span> BACK</button>
+          <div class="mods-title-row">
+            <div><h1>MOD MANAGER</h1><p>MONSTER HUNTER GENERATIONS ULTIMATE · GAMEBANANA</p></div>
+            <button class="secondary-button mods-refresh" id="mods-refresh-button" type="button" title="Refresh mod list" aria-label="Refresh mod list">↻</button>
+          </div>
+        </div>
+        <div class="mods-layout">
+          <section class="mods-list-panel" aria-label="Available mods">
+            <div class="mods-toolbar">
+              <label class="mods-search-wrap"><span aria-hidden="true">⌕</span><input id="mods-search" type="search" placeholder="Search mods" autocomplete="off"></label>
+              <span class="mods-count" id="mods-count"></span>
+            </div>
+            <div class="mods-list" id="mods-list" aria-live="polite"></div>
+          </section>
+          <section class="mod-detail-panel" id="mod-detail-panel" aria-label="Selected mod">
+            <div class="mod-detail-empty"><span>▤</span><p>Select a mod to view its files.</p></div>
+          </section>
         </div>
       </section>
 

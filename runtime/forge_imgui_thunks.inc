@@ -1807,26 +1807,6 @@ HLE_FUNC("ImDrawList_AddText_Vec2", ig_ImDrawList_AddText_Vec2) {
     IG_LEAVE(c);
 }
 
-HLE_FUNC("ImDrawList_AddText_FontPtr", ig_ImDrawList_AddText_FontPtr) {
-    uint32_t a0 = c->r[0];
-    uint32_t a1 = c->r[1];
-    float a2 = ig_f(c->r[2]);
-    uint32_t a4 = STK(1);
-    uint32_t a5 = STK(2);
-    uint32_t a6 = STK(3);
-    float a7 = ig_f(STK(4));
-    uint32_t a8 = STK(5);
-    if (!a0) { ig_null_self(c, "ImDrawList_AddText_FontPtr", 0); return; }
-    IG_ENTER(c);
-    void *ha0 = m_in(a0, 7);
-    void *ha1 = m_in(a1, 11);
-    void *ha8 = m_in(a8, 119);
-    ImDrawList_AddText_FontPtr(ha0, ha1, a2, (ImVec2_c){ig_f(c->r[3]), ig_f(STK(0))}, a4, GP(a5), GP(a6), a7, ha8);
-    m_after(a0);
-    m_after(a1);
-    m_after(a8);
-    IG_LEAVE(c);
-}
 HLE_FUNC("ImDrawList_AddTriangle", ig_ImDrawList_AddTriangle) {
     uint32_t a0 = c->r[0];
     uint32_t a4 = STK(3);
@@ -2467,22 +2447,6 @@ HLE_FUNC("ImFontAtlas_AddFontDefaultVector", ig_ImFontAtlas_AddFontDefaultVector
     c->r[0] = m_out(r_, 11);
 }
 
-HLE_FUNC("ImFontAtlas_AddFontFromFileTTF", ig_ImFontAtlas_AddFontFromFileTTF) {
-    uint32_t a0 = c->r[0];
-    uint32_t a1 = c->r[1];
-    float a2 = ig_f(c->r[2]);
-    uint32_t a3 = c->r[3];
-    uint32_t a4 = STK(0);
-    if (!a0) { ig_null_self(c, "ImFontAtlas_AddFontFromFileTTF", 0); return; }
-    IG_ENTER(c);
-    void *ha0 = m_in(a0, 12);
-    void *ha3 = m_in(a3, 18);
-    __auto_type r_ = ImFontAtlas_AddFontFromFileTTF(ha0, ig_path(a1), a2, ha3, GP(a4));
-    m_after(a0);
-    m_after(a3);
-    IG_LEAVE(c);
-    c->r[0] = m_out(r_, 11);
-}
 HLE_FUNC("ImFontAtlas_AddFontFromMemoryCompressedBase85TTF", ig_ImFontAtlas_AddFontFromMemoryCompressedBase85TTF) {
     uint32_t a0 = c->r[0];
     uint32_t a1 = c->r[1];
@@ -15076,7 +15040,7 @@ HLE_FUNC("igWindowRectRelToAbs", ig_igWindowRectRelToAbs) {
     c->r[0] = ret_;
 }
 
-// 1441 functions; not provided (19):
+// 1439 functions; not provided (19):
 //   ImDrawList_AddCallback (callback ImDrawCallback)
 //   ImGuiSelectionBasicStorage_GetNextSelectedItem (argument void**)
 //   ImGuiStorage_GetVoidPtrRef (returns void**)

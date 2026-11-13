@@ -3,10 +3,17 @@
 use rand::Rng;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
+use std::io::{Cursor, Read};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use zip::ZipArchive;
+
+#[cfg(windows)]
+const GAME_EXECUTABLE: &str = "mhgurecomp.exe";
+#[cfg(not(windows))]
+const GAME_EXECUTABLE: &str = "mhgurecomp";
 
 #[derive(Clone, Copy)]
 struct Field {
@@ -25,6 +32,7 @@ enum FieldKind {
     Decimal(f64, f64),
     AspectRatio,
     Multiplier(f64, f64),
+    BoundedText(usize),
     Key,
     ChatKey,
     MatchmakingKey,
@@ -164,6 +172,118 @@ const FIELDS: &[Field] = &[
         section: "Graphics",
         key: "SmoothGradients",
         id: "smoothGradients",
+        default: "Off",
+        kind: FieldKind::Toggle,
+    },
+    Field {
+        section: "HDR",
+        key: "HDR",
+        id: "hdr",
+        default: "Off",
+        kind: FieldKind::Toggle,
+    },
+    Field {
+        section: "HDR",
+        key: "PeakBrightness",
+        id: "hdrPeak",
+        default: "1000",
+        kind: FieldKind::Decimal(80.0, 10000.0),
+    },
+    Field {
+        section: "HDR",
+        key: "GameBrightness",
+        id: "hdrGame",
+        default: "203",
+        kind: FieldKind::Decimal(48.0, 500.0),
+    },
+    Field {
+        section: "HDR",
+        key: "UIBrightness",
+        id: "hdrUi",
+        default: "203",
+        kind: FieldKind::Decimal(48.0, 500.0),
+    },
+    Field {
+        section: "HDR",
+        key: "ToneMapper",
+        id: "hdrToneMapper",
+        default: "RenoDRT",
+        kind: FieldKind::Select(&["Vanilla", "None", "RenoDRT"]),
+    },
+    Field {
+        section: "HDR",
+        key: "GammaCorrection",
+        id: "hdrGamma",
+        default: "2.2",
+        kind: FieldKind::Select(&["Off", "2.2", "BT.1886"]),
+    },
+    Field {
+        section: "HDR",
+        key: "Exposure",
+        id: "hdrExposure",
+        default: "0.65",
+        kind: FieldKind::Decimal(0.0, 2.0),
+    },
+    Field {
+        section: "HDR",
+        key: "Highlights",
+        id: "hdrHighlights",
+        default: "60",
+        kind: FieldKind::Decimal(0.0, 100.0),
+    },
+    Field {
+        section: "HDR",
+        key: "Shadows",
+        id: "hdrShadows",
+        default: "50",
+        kind: FieldKind::Decimal(0.0, 100.0),
+    },
+    Field {
+        section: "HDR",
+        key: "Contrast",
+        id: "hdrContrast",
+        default: "50",
+        kind: FieldKind::Decimal(0.0, 100.0),
+    },
+    Field {
+        section: "HDR",
+        key: "Saturation",
+        id: "hdrSaturation",
+        default: "50",
+        kind: FieldKind::Decimal(0.0, 100.0),
+    },
+    Field {
+        section: "HDR",
+        key: "HighlightSaturation",
+        id: "hdrHighlightSaturation",
+        default: "82",
+        kind: FieldKind::Decimal(0.0, 100.0),
+    },
+    Field {
+        section: "HDR",
+        key: "Flare",
+        id: "hdrFlare",
+        default: "0",
+        kind: FieldKind::Decimal(0.0, 100.0),
+    },
+    Field {
+        section: "HDR",
+        key: "Bloom",
+        id: "hdrBloom",
+        default: "100",
+        kind: FieldKind::Decimal(0.0, 100.0),
+    },
+    Field {
+        section: "HDR",
+        key: "UnclampedScene",
+        id: "hdrScene",
+        default: "On",
+        kind: FieldKind::Toggle,
+    },
+    Field {
+        section: "HDR",
+        key: "Analysis",
+        id: "hdrAnalysis",
         default: "Off",
         kind: FieldKind::Toggle,
     },
@@ -477,10 +597,94 @@ const FIELDS: &[Field] = &[
     },
     Field {
         section: "Multiplayer",
+        key: "LagCompensation",
+        id: "lagCompensation",
+        default: "On",
+        kind: FieldKind::Toggle,
+    },
+    Field {
+        section: "Multiplayer",
         key: "ShareUrgentCredit",
         id: "shareUrgentCredit",
         default: "On",
         kind: FieldKind::Toggle,
+    },
+    Field {
+        section: "Multiplayer",
+        key: "RyuServers",
+        id: "ryuServers",
+        default: "",
+        kind: FieldKind::Text,
+    },
+    Field {
+        section: "Multiplayer",
+        key: "RyuHost",
+        id: "ryuHost",
+        default: "",
+        kind: FieldKind::BoundedText(127),
+    },
+    Field {
+        section: "Multiplayer",
+        key: "RyuPassphrase",
+        id: "ryuPassphrase",
+        default: "",
+        kind: FieldKind::BoundedText(39),
+    },
+    Field {
+        section: "Multiplayer",
+        key: "RyuServe",
+        id: "ryuServe",
+        default: "Off",
+        kind: FieldKind::Toggle,
+    },
+    Field {
+        section: "Multiplayer",
+        key: "RyuServePort",
+        id: "ryuServePort",
+        default: "30456",
+        kind: FieldKind::Integer(0.0, 65535.0),
+    },
+    Field {
+        section: "Multiplayer",
+        key: "RoomServer",
+        id: "roomServer",
+        default: "",
+        kind: FieldKind::BoundedText(127),
+    },
+    Field {
+        section: "Multiplayer",
+        key: "RoomPassword",
+        id: "roomPassword",
+        default: "",
+        kind: FieldKind::BoundedText(63),
+    },
+    Field {
+        section: "Multiplayer",
+        key: "RoomName",
+        id: "roomName",
+        default: "",
+        kind: FieldKind::BoundedText(31),
+    },
+    Field {
+        section: "Multiplayer",
+        key: "RoomHost",
+        id: "roomHost",
+        default: "Off",
+        kind: FieldKind::Toggle,
+    },
+    Field {
+        section: "Multiplayer",
+        key: "RoomServe",
+        id: "roomServe",
+        default: "Off",
+        kind: FieldKind::Toggle,
+    },
+    Field {
+        section: "Multiplayer",
+        key: "RoomServePort",
+        id: "roomServePort",
+        default: "24872",
+        kind: FieldKind::Integer(0.0, 65535.0),
     },
     Field {
         section: "Village Quests",
@@ -539,6 +743,13 @@ const FIELDS: &[Field] = &[
         kind: FieldKind::Select(&["Ask", "Auto", "Off"]),
     },
     Field {
+        section: "Application",
+        key: "SaveLocation",
+        id: "saveLocation",
+        default: "",
+        kind: FieldKind::Text,
+    },
+    Field {
         section: "Monster HP",
         key: "1Player",
         id: "hp1",
@@ -575,6 +786,7 @@ const CANONICAL_SECTIONS: &[&str] = &[
     "Anti-aliasing",
     "Upscaler",
     "Graphics",
+    "HDR",
     "Performance",
     "Controls",
     "Mouse",
@@ -849,6 +1061,13 @@ fn read_settings(directory: &Path) -> Result<Value, String> {
         let current_value = values.get(&current_address);
         let legacy_address = (field.section == "Controls")
             .then(|| address("Controller", field.key));
+        if field.id == "backgroundInput" || field.id == "rumble" {
+            let section_value = values.get(&address("Controls", field.key));
+            if let Some(value) = section_value {
+                settings.insert(field.id.to_string(), json!(value));
+                continue;
+            }
+        }
         if field.section == "Keybinds"
             && current_value.is_some_and(|value| is_previous_conflicting_default(field.key, value))
         {
@@ -1016,24 +1235,34 @@ fn valid_key_binding(value: &str) -> bool {
     valid_key_binding_with_limit(value, MAX_BIND_KEYS)
 }
 
+fn valid_key_binding_for_field(value: &str, field: &Field) -> bool {
+    let max_keys = match field.key {
+        "DpadUp" | "DpadDown" | "DpadLeft" | "DpadRight" => 2,
+        _ => MAX_BIND_KEYS,
+    };
+    valid_key_binding_with_limit(value, max_keys)
+}
+
 fn valid_chat_key(value: &str) -> bool {
     if value.is_empty() {
         return true;
     }
+    let lowered = value.to_ascii_lowercase();
     value.len() < 32
         && !value.contains(['\r', '\n', ';', '#'])
         && !matches!(
-            value.to_ascii_lowercase().as_str(),
+            lowered.as_str(),
             "escape" | "esc" | "insert" | "f1" | "f7" | "f8" | "f9" | "f10" | "f11" | "f12"
+        )
+        && !matches!(
+            lowered.as_str(),
+            "mouse left" | "mouse right" | "mouse middle" | "mouse 4" | "mouse 5"
+                | "wheel up" | "wheel down"
         )
         && valid_keyboard_key(value)
 }
 
-fn valid_matchmaking_key(value: &str) -> bool {
-    value.len() < 64 && !value.contains(['\r', '\n', ';', '#'])
-}
-
-fn valid_key_binding_with_limit(value: &str, max_keys: usize) -> bool {
+fn valid_key_binding_value(value: &str, max_keys: usize) -> bool {
     if value.contains(['\r', '\n', ';', '#']) {
         return false;
     }
@@ -1054,6 +1283,14 @@ fn valid_key_binding_with_limit(value: &str, max_keys: usize) -> bool {
                 || key.eq_ignore_ascii_case("Wheel Up")
                 || key.eq_ignore_ascii_case("Wheel Down"))
     })
+}
+
+fn valid_matchmaking_key(value: &str) -> bool {
+    value.len() < 64 && !value.contains(['\r', '\n', ';', '#'])
+}
+
+fn valid_key_binding_with_limit(value: &str, max_keys: usize) -> bool {
+    valid_key_binding_value(value, max_keys)
 }
 
 fn validate_settings(settings: &Value) -> HashMap<String, String> {
@@ -1086,10 +1323,15 @@ fn validate_settings(settings: &Value) -> HashMap<String, String> {
             }
             FieldKind::AspectRatio => (!valid_aspect_ratio(value))
                 .then(|| "AspectRatio must be Auto or a ratio from 0.5 to 10.".to_string()),
-            FieldKind::Key => (!valid_key_binding(value)).then(|| {
+            FieldKind::Key => (!valid_key_binding_for_field(value, field)).then(|| {
                 format!(
-                    "{} must contain up to three supported keys or mouse buttons.",
-                    field.key
+                    "{} must contain up to {} supported keys or mouse buttons.",
+                    field.key,
+                    if matches!(field.key, "DpadUp" | "DpadDown" | "DpadLeft" | "DpadRight") {
+                        2
+                    } else {
+                        MAX_BIND_KEYS
+                    }
                 )
             }),
             FieldKind::ChatKey => (!valid_chat_key(value))
@@ -1128,6 +1370,11 @@ fn validate_settings(settings: &Value) -> HashMap<String, String> {
                 }),
             FieldKind::Text => (value.len() >= 256 || value.contains(['\r', '\n', ';', '#']))
                 .then(|| format!("{} must be under 256 bytes and fit on one line.", field.key)),
+            FieldKind::BoundedText(max) => {
+                (value.len() > max || value.contains(['\r', '\n', ';', '#'])).then(|| {
+                    format!("{} must be at most {max} bytes and fit on one line.", field.key)
+                })
+            }
         };
         if let Some(error) = error {
             errors.insert(field.id.to_string(), error);
@@ -1187,6 +1434,17 @@ fn validate_settings(settings: &Value) -> HashMap<String, String> {
     errors
 }
 
+fn controls_order(key: &str) -> usize {
+    match normalize(key).as_str() {
+        "facebuttons" => 0,
+        "backgroundinput" => 1,
+        "rumble" => 2,
+        "comboinputwindow" => 3,
+        "chatkey" => 4,
+        _ => 100,
+    }
+}
+
 fn value_as_string(value: &Value) -> String {
     match value {
         Value::String(value) => value.clone(),
@@ -1222,6 +1480,54 @@ fn append_missing_entries(
     let Some(entries) = missing.remove(section) else {
         return;
     };
+    let entries = entries;
+    if normalize(section).as_str() == "controls" {
+        let mut face_buttons = Vec::new();
+        let mut rest = Vec::new();
+        for (key, value) in entries {
+            if normalize(&key).as_str() == "facebuttons" {
+                face_buttons.push((key, value));
+            } else {
+                rest.push((key, value));
+            }
+        }
+        rest.sort_by(|(left_key, _), (right_key, _)| {
+            controls_order(left_key).cmp(&controls_order(right_key))
+        });
+        if !face_buttons.is_empty() {
+            output.push("[Controls]".to_string());
+            for (key, value) in face_buttons {
+                let ini_key = FIELDS
+                    .iter()
+                    .find(|field| normalize(field.section) == section && normalize(field.key) == key)
+                    .map(|field| field.key.to_string())
+                    .unwrap_or_else(|| format!("Quest{}", key.trim_start_matches("quest")));
+                output.push(format!("{ini_key} = {value}"));
+            }
+            if !rest.is_empty() {
+                output.push(String::new());
+                output.push("[Controls]".to_string());
+                for (key, value) in rest {
+                    let ini_key = FIELDS
+                        .iter()
+                        .find(|field| normalize(field.section) == section && normalize(field.key) == key)
+                        .map(|field| field.key.to_string())
+                        .unwrap_or_else(|| format!("Quest{}", key.trim_start_matches("quest")));
+                    output.push(format!("{ini_key} = {value}"));
+                }
+            }
+            return;
+        }
+        for (key, value) in rest {
+            let ini_key = FIELDS
+                .iter()
+                .find(|field| normalize(field.section) == section && normalize(field.key) == key)
+                .map(|field| field.key.to_string())
+                .unwrap_or_else(|| format!("Quest{}", key.trim_start_matches("quest")));
+            output.push(format!("{ini_key} = {value}"));
+        }
+        return;
+    }
     for (key, value) in entries {
         let ini_key = FIELDS
             .iter()
@@ -1416,6 +1722,18 @@ fn save_settings(directory: &Path, settings: &Value) -> Result<(), String> {
     }
 
     let mut missing = BTreeMap::<String, Vec<(String, String)>>::new();
+    let controls_missing = !original_lines.iter().any(|line| {
+        let trimmed = line.trim();
+        trimmed.starts_with("[") && normalize(&trimmed[1..trimmed.find(']').unwrap_or(trimmed.len())]) == "controls"
+    });
+    if controls_missing
+        && string_setting(settings, "backgroundInput").is_some()
+        && string_setting(settings, "rumble").is_some()
+        && updates.iter().any(|(key, _)| key == &address("Controls", "BackgroundInput"))
+        && !updates.iter().any(|(key, _)| key == &address("Controls", "Rumble"))
+    {
+        updates.push((address("Controls", "Rumble"), string_setting(settings, "rumble").unwrap().to_string()));
+    }
     for (current_address, value) in &updates {
         if existing.contains_key(current_address) {
             continue;
@@ -1430,12 +1748,14 @@ fn save_settings(directory: &Path, settings: &Value) -> Result<(), String> {
 
     let mut output = Vec::new();
     section.clear();
+    let mut seen_control_order = false;
     for line in &original_lines {
         let trimmed = line.trim();
         if trimmed.starts_with('[') {
             if let Some(close) = trimmed.find(']') {
                 append_missing_entries(&mut output, &mut missing, &section);
                 section = normalize(&trimmed[1..close]);
+                if section == "controls" { seen_control_order = true; }
             }
         }
         if (section == "keyboard" && discard_keyboard_section)
@@ -1467,6 +1787,19 @@ fn save_settings(directory: &Path, settings: &Value) -> Result<(), String> {
     }
 
     append_missing_entries(&mut output, &mut missing, &section);
+    if !seen_control_order && !missing.is_empty() {
+        for name in CANONICAL_SECTIONS {
+            let normalized = normalize(name);
+            if normalized == "controls" && missing.contains_key(&normalized) {
+                if !output.is_empty() && output.last().is_some_and(|line| !line.is_empty()) {
+                    output.push(String::new());
+                }
+                output.push("[Controls]".to_string());
+                append_missing_entries(&mut output, &mut missing, &normalized);
+                break;
+            }
+        }
+    }
     for name in CANONICAL_SECTIONS {
         let normalized = normalize(name);
         if !missing.contains_key(&normalized) {
@@ -1507,7 +1840,7 @@ fn get_app_state() -> Result<AppState, String> {
     let mut rng = rand::thread_rng();
     let background = ["1.webp", "2.webp", "3.webp", "4.webp"][rng.gen_range(0..4)];
     Ok(AppState {
-        game_exists: directory.join("mhgurecomp.exe").is_file(),
+        game_exists: directory.join(GAME_EXECUTABLE).is_file(),
         background,
     })
 }
@@ -1549,14 +1882,14 @@ fn game_command(game: &Path, directory: &Path) -> Command {
 #[tauri::command]
 fn launch_game() -> Result<(), String> {
     let directory = app_directory()?;
-    let game = directory.join("mhgurecomp.exe");
+    let game = directory.join(GAME_EXECUTABLE);
     if !game.is_file() {
-        return Err("mhgurecomp.exe was not found next to the launcher.".to_string());
+        return Err(format!("{GAME_EXECUTABLE} was not found next to the launcher."));
     }
     game_command(&game, &directory)
         .spawn()
         .map(|_| ())
-        .map_err(|error| format!("Could not launch mhgurecomp.exe: {error}"))
+        .map_err(|error| format!("Could not launch {GAME_EXECUTABLE}: {error}"))
 }
 
 #[tauri::command]
@@ -1569,6 +1902,354 @@ fn open_ini() -> Result<(), String> {
     open::that(&ini).map_err(|error| format!("Could not open {}: {error}", ini.display()))
 }
 
+const GAMEBANANA_GAME_ID: u64 = 17088;
+const MAX_MOD_ARCHIVE_BYTES: usize = 512 * 1024 * 1024;
+const MAX_MOD_UNPACKED_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ModFile {
+    id: String,
+    name: String,
+    version: String,
+    size: u64,
+    added: u64,
+    download_url: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ModImage {
+    url: String,
+    alt: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ModDetails {
+    description_html: String,
+    images: Vec<ModImage>,
+    files: Vec<ModFile>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ModEntry {
+    id: String,
+    name: String,
+    version: String,
+    updated: u64,
+    url: String,
+    installed: bool,
+    update_available: bool,
+}
+
+fn gamebanana_get(url: &str) -> Result<Value, String> {
+    reqwest::blocking::Client::builder()
+        .user_agent("MHGU-Recomp-Launcher/1.0")
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|error| error.to_string())?
+        .get(url)
+        .send()
+        .and_then(reqwest::blocking::Response::error_for_status)
+        .map_err(|error| format!("GameBanana request failed: {error}"))?
+        .json::<Value>()
+        .map_err(|error| format!("Could not read GameBanana response: {error}"))
+}
+
+fn gb_string(value: &Value, key: &str) -> String {
+    value.get(key).and_then(Value::as_str).unwrap_or_default().to_string()
+}
+
+fn gb_number(value: &Value, key: &str) -> u64 {
+    value.get(key).and_then(Value::as_u64).unwrap_or_default()
+}
+
+fn mod_registry_path(directory: &Path) -> PathBuf {
+    directory.join("mods").join(".launcher-gamebanana.json")
+}
+
+fn read_mod_registry(directory: &Path) -> HashMap<String, Value> {
+    fs::read(mod_registry_path(directory))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default()
+}
+
+fn write_mod_registry(directory: &Path, registry: &HashMap<String, Value>) -> Result<(), String> {
+    let path = mod_registry_path(directory);
+    fs::create_dir_all(path.parent().expect("registry parent"))
+        .map_err(|error| format!("Could not create mods folder: {error}"))?;
+    fs::write(path, serde_json::to_vec_pretty(registry).map_err(|error| error.to_string())?)
+        .map_err(|error| format!("Could not save installed mod list: {error}"))
+}
+
+fn gb_mod_file_list(item: &Value) -> Result<Vec<ModFile>, String> {
+    let files = item.get("_aFiles")
+        .ok_or_else(|| "This GameBanana mod has no downloadable files.".to_string())?;
+    let entries = if let Some(files) = files.as_array() {
+        files.iter().collect::<Vec<_>>()
+    } else if let Some(files) = files.as_object() {
+        files.values().collect::<Vec<_>>()
+    } else {
+        return Err("This GameBanana mod has no downloadable files.".to_string());
+    };
+    let mut result = entries.into_iter().filter_map(|file| {
+        let id = gb_number(file, "_idRow").to_string();
+        let download_url = gb_string(file, "_sDownloadUrl");
+        if id == "0" || !download_url.starts_with("https://gamebanana.com/dl/") { return None; }
+        Some(ModFile {
+            id,
+            name: gb_string(file, "_sFile"),
+            version: gb_string(file, "_sVersion"),
+            size: gb_number(file, "_nFilesize"),
+            added: gb_number(file, "_tsDateAdded"),
+            download_url,
+        })
+    }).collect::<Vec<_>>();
+    result.sort_by_key(|file| file.added);
+    if result.is_empty() { return Err("This GameBanana mod has no downloadable files.".to_string()); }
+    Ok(result)
+}
+
+fn gb_mod_files(mod_id: &str) -> Result<Vec<ModFile>, String> {
+    if !mod_id.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err("Invalid GameBanana mod ID.".to_string());
+    }
+    let item = gamebanana_get(&format!("https://gamebanana.com/apiv11/Mod/{mod_id}/ProfilePage"))?;
+    gb_mod_file_list(&item)
+}
+
+fn gb_mod_images(item: &Value, name: &str) -> Vec<ModImage> {
+    item.pointer("/_aPreviewMedia/_aImages")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|image| {
+            let base = gb_string(image, "_sBaseUrl");
+            let preferred = gb_string(image, "_sFile530");
+            let filename = if preferred.is_empty() { gb_string(image, "_sFile") } else { preferred };
+            if !base.starts_with("https://images.gamebanana.com/")
+                || filename.is_empty()
+                || filename.contains('/')
+                || filename.contains('\\')
+                || filename.contains("..")
+            {
+                return None;
+            }
+            Some(ModImage {
+                url: format!("{}/{}", base.trim_end_matches('/'), filename),
+                alt: format!("{name} preview"),
+            })
+        })
+        .take(8)
+        .collect()
+}
+
+#[tauri::command]
+fn get_gamebanana_mods() -> Result<Vec<ModEntry>, String> {
+    let directory = app_directory()?;
+    let registry = read_mod_registry(&directory);
+    let first_page = gamebanana_get("https://gamebanana.com/apiv13/Mod/Index?_nPerpage=15&_aFilters%5BGeneric_Game%5D=17088&_nPage=1")?;
+    let record_count = first_page.pointer("/_aMetadata/_nRecordCount").and_then(Value::as_u64)
+        .ok_or_else(|| "GameBanana returned invalid catalog metadata.".to_string())?;
+    let page_count = record_count.div_ceil(15).min(100);
+    let mut records = first_page.get("_aRecords").and_then(Value::as_array).cloned()
+        .ok_or_else(|| "GameBanana returned an invalid mod list.".to_string())?;
+    for page in 2..=page_count {
+        let response = gamebanana_get(&format!(
+            "https://gamebanana.com/apiv13/Mod/Index?_nPerpage=15&_aFilters%5BGeneric_Game%5D=17088&_nPage={page}"
+        ))?;
+        let page_records = response.get("_aRecords").and_then(Value::as_array)
+            .ok_or_else(|| "GameBanana returned an invalid mod list page.".to_string())?;
+        records.extend(page_records.iter().cloned());
+    }
+    let mut result = Vec::new();
+    for item in &records {
+        if item.pointer("/_aGame/_idRow").and_then(Value::as_u64) != Some(GAMEBANANA_GAME_ID)
+            || item.get("_bHasFiles").and_then(Value::as_bool) != Some(true) { continue; }
+        let id = gb_number(item, "_idRow").to_string();
+        let installed = registry.get(&id);
+        let updated = gb_number(item, "_tsDateUpdated");
+        let installed_updated = installed.and_then(|entry| entry.get("updated")).and_then(Value::as_u64).unwrap_or_default();
+        result.push(ModEntry {
+            id: id.clone(),
+            name: gb_string(item, "_sName"),
+            version: gb_string(item, "_sVersion"),
+            updated,
+            url: format!("https://gamebanana.com/mods/{id}"),
+            installed: installed.is_some(),
+            update_available: installed.is_some() && updated > installed_updated,
+        });
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+fn get_gamebanana_mod_details(mod_id: String) -> Result<ModDetails, String> {
+    if !mod_id.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err("Invalid GameBanana mod ID.".to_string());
+    }
+    let item = gamebanana_get(&format!("https://gamebanana.com/apiv11/Mod/{mod_id}/ProfilePage"))?;
+    if item.pointer("/_aGame/_idRow").and_then(Value::as_u64) != Some(GAMEBANANA_GAME_ID) {
+        return Err("This mod is not listed for Monster Hunter Generations Ultimate.".to_string());
+    }
+    let name = gb_string(&item, "_sName");
+    Ok(ModDetails {
+        description_html: gb_string(&item, "_sText"),
+        images: gb_mod_images(&item, &name),
+        files: gb_mod_file_list(&item)?,
+    })
+}
+
+fn safe_mod_name(name: &str, id: &str) -> String {
+    let cleaned = name.chars().map(|character| {
+        if character.is_ascii_alphanumeric() || matches!(character, ' ' | '-' | '_' | '.') { character } else { '_' }
+    }).collect::<String>().trim_matches([' ', '.']).to_string();
+    format!("{}-{}", cleaned.chars().take(72).collect::<String>(), id)
+}
+
+fn extract_mod_archive(bytes: &[u8], destination: &Path) -> Result<(), String> {
+    if bytes.len() > MAX_MOD_ARCHIVE_BYTES { return Err("Mod archive exceeds the 512 MiB download limit.".to_string()); }
+    let mut archive = ZipArchive::new(Cursor::new(bytes)).map_err(|error| format!("Invalid ZIP archive: {error}"))?;
+    let mut total_size = 0u64;
+    let mut count = 0usize;
+    for index in 0..archive.len() {
+        let mut file = archive.by_index(index).map_err(|error| error.to_string())?;
+        count += 1;
+        total_size = total_size.saturating_add(file.size());
+        if count > 20_000 || total_size > MAX_MOD_UNPACKED_BYTES {
+            return Err("Mod archive exceeds extraction limits.".to_string());
+        }
+        let Some(relative) = file.enclosed_name() else {
+            return Err("Mod archive contains an unsafe file path.".to_string());
+        };
+        let output = destination.join(relative);
+        if file.is_dir() {
+            fs::create_dir_all(&output).map_err(|error| error.to_string())?;
+        } else {
+            if let Some(parent) = output.parent() { fs::create_dir_all(parent).map_err(|error| error.to_string())?; }
+            let mut output_file = fs::File::create(output).map_err(|error| error.to_string())?;
+            std::io::copy(&mut file, &mut output_file).map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+fn has_mod_directory(root: &Path, name: &str, depth: usize) -> bool {
+    if root.join(name).is_dir() { return true; }
+    if depth == 0 { return false; }
+    fs::read_dir(root).ok().into_iter().flatten().filter_map(Result::ok).any(|entry| {
+        entry.file_type().is_ok_and(|kind| kind.is_dir())
+            && !entry.file_name().to_string_lossy().starts_with('.')
+            && has_mod_directory(&entry.path(), name, depth - 1)
+    })
+}
+
+#[tauri::command]
+fn install_gamebanana_mod(mod_id: String, file_ids: Vec<String>) -> Result<(), String> {
+    if !mod_id.bytes().all(|byte| byte.is_ascii_digit()) || file_ids.is_empty() || file_ids.len() > 20 {
+        return Err("Select one or more valid mod files.".to_string());
+    }
+    let files = gb_mod_files(&mod_id)?;
+    let selected = files.into_iter().filter(|file| file_ids.contains(&file.id)).collect::<Vec<_>>();
+    if selected.len() != file_ids.iter().collect::<HashSet<_>>().len() {
+        return Err("One or more selected files do not belong to this mod.".to_string());
+    }
+    let details = gamebanana_get(&format!("https://gamebanana.com/apiv11/Mod/{mod_id}/ProfilePage"))?;
+    let name = gb_string(&details, "_sName");
+    let game_id = details.pointer("/_aGame/_idRow").and_then(Value::as_u64);
+    if game_id != Some(GAMEBANANA_GAME_ID) { return Err("This mod is not listed for Monster Hunter Generations Ultimate.".to_string()); }
+    let directory = app_directory()?;
+    let mods = directory.join("mods");
+    fs::create_dir_all(&mods).map_err(|error| format!("Could not create mods folder: {error}"))?;
+    let folder_name = safe_mod_name(&name, &mod_id);
+    let staging = mods.join(format!(".install-{mod_id}"));
+    if staging.exists() { fs::remove_dir_all(&staging).map_err(|error| error.to_string())?; }
+    fs::create_dir_all(&staging).map_err(|error| error.to_string())?;
+    let result = (|| {
+        for file in &selected {
+            let response = reqwest::blocking::Client::builder()
+                .user_agent("MHGU-Recomp-Launcher/1.0")
+                .timeout(std::time::Duration::from_secs(120))
+                .build().map_err(|error| error.to_string())?
+                .get(&file.download_url).send()
+                .and_then(reqwest::blocking::Response::error_for_status)
+                .map_err(|error| format!("Could not download {}: {error}", file.name))?;
+            if response.content_length().is_some_and(|size| size > MAX_MOD_ARCHIVE_BYTES as u64) {
+                return Err(format!("{} exceeds the 512 MiB download limit.", file.name));
+            }
+            let mut bytes = Vec::new();
+            response.take(MAX_MOD_ARCHIVE_BYTES as u64 + 1).read_to_end(&mut bytes)
+                .map_err(|error| format!("Could not read {}: {error}", file.name))?;
+            extract_mod_archive(&bytes, &staging)?;
+        }
+        let mut entries = fs::read_dir(&staging).map_err(|error| error.to_string())?;
+        let root = entries.next().and_then(Result::ok).map(|entry| entry.path());
+        let source = if let Some(root) = root.filter(|path| path.is_dir()) {
+            if fs::read_dir(&staging).map_err(|error| error.to_string())?.count() == 1 { root } else { staging.clone() }
+        } else { staging.clone() };
+        let valid_layout = ["romfs", "exefs", "nativeNX", "subsdk0"]
+            .iter().any(|folder| has_mod_directory(&source, folder, 4));
+        if !valid_layout { return Err("The selected archive does not contain a recognized MHGU mod folder (romfs, exefs, nativeNX, or subsdk).".to_string()); }
+        let final_path = mods.join(&folder_name);
+        let backup = mods.join(format!(".backup-{mod_id}"));
+        if backup.exists() { fs::remove_dir_all(&backup).map_err(|error| error.to_string())?; }
+        if final_path.exists() { fs::rename(&final_path, &backup).map_err(|error| format!("Could not replace the previous mod: {error}"))?; }
+        let move_result = fs::rename(&source, &final_path).map_err(|error| format!("Could not install mod: {error}"));
+        if move_result.is_err() && backup.exists() { let _ = fs::rename(&backup, &final_path); }
+        move_result?;
+        if backup.exists() { fs::remove_dir_all(backup).map_err(|error| error.to_string())?; }
+        let mut registry = read_mod_registry(&directory);
+        registry.insert(mod_id.clone(), json!({
+            "name": name,
+            "folder": folder_name,
+            "fileIds": selected.iter().map(|file| file.id.clone()).collect::<Vec<_>>(),
+            "updated": gb_number(&details, "_tsDateUpdated")
+        }));
+        write_mod_registry(&directory, &registry)
+    })();
+    if staging.exists() { let _ = fs::remove_dir_all(staging); }
+    result
+}
+
+fn is_safe_managed_mod_folder(folder: &str, mod_id: &str) -> bool {
+    !folder.is_empty()
+        && !folder.starts_with('.')
+        && !folder.contains('/')
+        && !folder.contains('\\')
+        && folder.ends_with(&format!("-{mod_id}"))
+}
+
+#[tauri::command]
+fn remove_gamebanana_mod(mod_id: String) -> Result<(), String> {
+    if !mod_id.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err("Invalid GameBanana mod ID.".to_string());
+    }
+    let directory = app_directory()?;
+    let mods = directory.join("mods");
+    let mut registry = read_mod_registry(&directory);
+    let folder = registry.get(&mod_id)
+        .and_then(|entry| entry.get("folder"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| "This mod was not installed by the launcher.".to_string())?
+        .to_string();
+    if !is_safe_managed_mod_folder(&folder, &mod_id) {
+        return Err("The recorded mod folder is not safe to remove.".to_string());
+    }
+    let path = mods.join(&folder);
+    if path.exists() {
+        let metadata = fs::symlink_metadata(&path).map_err(|error| error.to_string())?;
+        if !metadata.file_type().is_dir() || metadata.file_type().is_symlink() {
+            return Err("The recorded mod path is not a regular directory.".to_string());
+        }
+        fs::remove_dir_all(&path).map_err(|error| format!("Could not remove mod folder: {error}"))?;
+    }
+    registry.remove(&mod_id);
+    write_mod_registry(&directory, &registry)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1578,7 +2259,11 @@ pub fn run() {
             get_defaults,
             save_launcher_settings,
             launch_game,
-            open_ini
+            open_ini,
+            get_gamebanana_mods,
+            get_gamebanana_mod_details,
+            install_gamebanana_mod,
+            remove_gamebanana_mod
         ])
         .run(tauri::generate_context!())
         .expect("error while running MHGU Launcher");
@@ -1591,6 +2276,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_directory() -> PathBuf {
@@ -1601,6 +2287,55 @@ mod tests {
         let path = std::env::temp_dir().join(format!("MHGU Launcher spécial 路径 {id}"));
         fs::create_dir_all(&path).expect("create temp directory");
         path
+    }
+
+    #[test]
+    fn mod_archive_extracts_switch_layout_and_rejects_parent_paths() {
+        let directory = temp_directory();
+        let mut archive = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        archive.start_file(
+            "atmosphere/contents/0100770008DD8000/romfs/test.bin",
+            zip::write::SimpleFileOptions::default(),
+        ).expect("add valid mod file");
+        archive.write_all(b"mod data").expect("write valid mod file");
+        let bytes = archive.finish().expect("finish valid archive").into_inner();
+        extract_mod_archive(&bytes, &directory).expect("extract valid mod archive");
+        assert!(has_mod_directory(&directory, "romfs", 4));
+        assert_eq!(fs::read(directory.join("atmosphere/contents/0100770008DD8000/romfs/test.bin")).unwrap(), b"mod data");
+
+        let mut unsafe_archive = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        unsafe_archive.start_file("../outside.bin", zip::write::SimpleFileOptions::default())
+            .expect("add unsafe archive path");
+        unsafe_archive.write_all(b"outside").expect("write unsafe archive entry");
+        let unsafe_bytes = unsafe_archive.finish().expect("finish unsafe archive").into_inner();
+        assert!(extract_mod_archive(&unsafe_bytes, &directory).is_err());
+        assert!(!directory.parent().unwrap().join("outside.bin").exists());
+        fs::remove_dir_all(directory).expect("clean temp directory");
+    }
+
+    #[test]
+    fn gamebanana_file_list_accepts_array_and_object_shapes() {
+        let file = json!({
+            "_idRow": 1886003,
+            "_sFile": "weapon-transmog.zip",
+            "_sVersion": "1.2.1",
+            "_nFilesize": 2997,
+            "_tsDateAdded": 1794454850,
+            "_sDownloadUrl": "https://gamebanana.com/dl/1886003"
+        });
+        let array = json!({ "_aFiles": [file.clone()] });
+        let object = json!({ "_aFiles": { "1886003": file } });
+
+        assert_eq!(gb_mod_file_list(&array).expect("array file list")[0].id, "1886003");
+        assert_eq!(gb_mod_file_list(&object).expect("object file list")[0].id, "1886003");
+    }
+
+    #[test]
+    fn managed_mod_folder_validation_rejects_unmanaged_and_unsafe_paths() {
+        assert!(is_safe_managed_mod_folder("Weapon Transmog-726009", "726009"));
+        assert!(!is_safe_managed_mod_folder("Custom Mod", "726009"));
+        assert!(!is_safe_managed_mod_folder("../outside-726009", "726009"));
+        assert!(!is_safe_managed_mod_folder(".backup-726009", "726009"));
     }
 
     #[test]
@@ -1655,6 +2390,10 @@ mod tests {
             "ssao",
             "fxaaMode",
             "smoothGradients",
+            "hdr",
+            "hdrPeak",
+            "hdrGame",
+            "hdrUi",
             "menuConfirm",
             "buttonIcons",
             "chatKey",
@@ -1664,6 +2403,10 @@ mod tests {
             "discordShowHunter",
             "showFps",
             "shareUrgentCredit",
+            "lagCompensation",
+            "ryuServers",
+            "roomServer",
+            "saveLocation",
             "confirmExit",
             "language",
             "menuTheme",
@@ -1734,7 +2477,7 @@ mod tests {
     #[test]
     fn launcher_started_game_uses_ini_beside_its_executable() {
         let directory = temp_directory();
-        let game = directory.join("mhgurecomp.exe");
+        let game = directory.join(GAME_EXECUTABLE);
         let command = game_command(&game, &directory);
 
         assert_eq!(command.get_program(), game.as_os_str());

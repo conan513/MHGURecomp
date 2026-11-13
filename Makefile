@@ -342,6 +342,8 @@ $(O)/rt/%.o: runtime/%.c $(RT_HDRS)
 	$(CC) $(RTFLAGS) -c $< -o $@
 
 $(O)/rt/forge_imgui.o: runtime/forge_imgui_thunks.inc $(IMGUI)/cimgui.h
+runtime/forge_imgui_thunks.inc: tools/imgui_thunks.py $(IMGUI)/cimgui.h $(wildcard $(IMGUI)/generator/output/*.json)
+	$(PY) tools/imgui_thunks.py
 $(O)/rt/forge_imgui.o: RTFLAGS += -DCIMGUI_NO_EXPORT -Wno-unused-variable
 
 $(O)/rt/overlay.o: runtime/overlay.cpp runtime/overlay.h runtime/forge.h
@@ -598,8 +600,8 @@ $(B)/data/.complete:
 	fi
 
 gen:
-	cd tools && $(PY_TOOL) gen.py sdk ../$(GAME)/exefs/sdk 0x02400000 ../$(GEN)/sdk --hle ../runtime/hle/hle_symbols.txt
-	cd tools && $(PY_TOOL) gen.py main ../$(GAME)/exefs/main 0x00200000 ../$(GEN)/main
+	cd tools && $(PY_TOOL) gen.py sdk "../$(GAME)/exefs/sdk" 0x02400000 ../$(GEN)/sdk --hle ../runtime/hle/hle_symbols.txt
+	cd tools && $(PY_TOOL) gen.py main "../$(GAME)/exefs/main" 0x00200000 ../$(GEN)/main
 	echo '$(GEN_ID)' > $(GEN)/gen.id
 
 # differential test of the recompiler against Unicorn (tools/test_lift.py)

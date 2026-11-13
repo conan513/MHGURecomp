@@ -649,13 +649,23 @@ needs:
   to `log.txt` as usual;
 - for the updater: zlib's headers to build it, and `libcurl.so.4` (curl) when it runs, which SteamOS and the
   usual desktop distributions have. It loads libcurl itself, so without it the updater just starts the game.
+- for the desktop launcher: Node.js 22+, stable Rust, GTK 3 and WebKitGTK 4.1 development files (for example,
+  `libgtk-3-dev` and `libwebkit2gtk-4.1-dev` on Debian/Ubuntu). The launcher is built as a native Linux app and starts
+  `mhgurecomp` beside itself.
 
 ```bash
-python3 -m venv tools/venv && tools/venv/bin/pip install -r tools/requirements.txt
-make gen GAME=../mhgu/game       # as above: the folder holding exefs/ and romfs/
-make -j8 GAME=../mhgu/game
-cd build && ./mhgurecomp
+./build-linux.sh
 ```
+
+By default the script uses `/mnt/nvme/MHGU/data` as the game folder and `/mnt/nvme/MHGU/` as the output folder.
+It accepts either lowercase `exefs/` and `romfs/` or the `ExeFS/` and `RomFS/` spelling.
+It reuses the existing `data/` without copying or replacing game files (adding a completion marker and lowercase
+directory aliases if needed), creates the Python environment, and installs npm dependencies. If the current generated
+game code is already present in `generated/`, it reuses it; otherwise it requires the game's `exefs/sdk` and
+regenerates the code. `exefs/sdk` is a game file, not a directory. Then it builds the Linux runtime, updater and
+launcher there. Use `--game DIR` to use another game folder,
+`--output DIR` to change the destination, and `--jobs N` to change build parallelism. Start either
+`/mnt/nvme/MHGU/MHGU-Launcher` or `/mnt/nvme/MHGU/mhgurecomp` on Linux.
 
 `build/` becomes the game folder exactly as on Windows: `mhgurecomp`, `mhgugame.so` with the recompiled game
 code and `data/` as hard links to your game files, nothing else; the ini, caches and `mods/` are written beside

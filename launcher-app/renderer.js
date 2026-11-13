@@ -1,20 +1,32 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
-const currentWindow = getCurrentWindow();
+const hasTauriRuntime = Boolean(window.__TAURI_INTERNALS__);
+const currentWindow = hasTauriRuntime ? getCurrentWindow() : null;
+const invokeLauncher = (command, args) => hasTauriRuntime
+  ? invoke(command, args)
+  : Promise.reject(new Error('Mod downloads and details are available in the desktop launcher.'));
 const launcher = Object.freeze({
-  getAppState: () => invoke('get_app_state'),
-  loadSettings: () => invoke('get_settings'),
-  getDefaults: () => invoke('get_defaults'),
-  saveSettings: (settings) => invoke('save_launcher_settings', { settings }),
-  launchGame: () => invoke('launch_game'),
-  openIni: () => invoke('open_ini'),
-  windowAction: (action) => action === 'minimize' ? currentWindow.minimize() : currentWindow.close(),
+  getAppState: () => invokeLauncher('get_app_state'),
+  loadSettings: () => invokeLauncher('get_settings'),
+  getDefaults: () => invokeLauncher('get_defaults'),
+  saveSettings: (settings) => invokeLauncher('save_launcher_settings', { settings }),
+  launchGame: () => invokeLauncher('launch_game'),
+  openIni: () => invokeLauncher('open_ini'),
+  getMods: () => invokeLauncher('get_gamebanana_mods'),
+  getModDetails: (modId) => invokeLauncher('get_gamebanana_mod_details', { modId }),
+  installMod: (modId, fileIds) => invokeLauncher('install_gamebanana_mod', { modId, fileIds }),
+  removeMod: (modId) => invokeLauncher('remove_gamebanana_mod', { modId }),
+  windowAction: (action) => {
+    if (!hasTauriRuntime) return Promise.reject(new Error('Window controls are only available in the desktop launcher.'));
+    return action === 'minimize' ? currentWindow.minimize() : currentWindow.close();
+  },
 });
 
 const categories = [
   { id: 'display', title: 'Display', icon: '◈' },
   { id: 'graphics', title: 'Graphics', icon: '◇' },
+  { id: 'hdr', title: 'HDR', icon: '◐' },
   { id: 'controller', title: 'Controller', icon: '◉' },
   { id: 'audio', title: 'Audio', icon: '♫' },
   { id: 'keyboardMouse', title: 'Keyboard/Mouse', icon: '⌘' },
@@ -87,15 +99,22 @@ const categoryFields = {
     'fsrObjectMotion', 'fsrReactive', 'fsrAnimSurf', 'drawDistance', 'smoothGradients',
     'showFps', 'fps', 'vsync', 'shaderPrewarm',
   ],
+  hdr: [
+    'hdr', 'hdrPeak', 'hdrGame', 'hdrUi', 'hdrToneMapper', 'hdrGamma', 'hdrExposure',
+    'hdrHighlights', 'hdrShadows', 'hdrContrast', 'hdrSaturation', 'hdrHighlightSaturation',
+    'hdrFlare', 'hdrBloom', 'hdrScene', 'hdrAnalysis', 'hdrFormat',
+  ],
   controller: ['faceButtons', 'menuConfirm', 'buttonIcons', 'backgroundInput', 'rumble', 'comboInputWindow'],
   audio: ['volume', 'muteInBackground'],
   keyboardMouse: [],
   multiplayer: [
-    'hubServer', 'port', 'join', 'matchmakingKey', 'syncSmallMonsters', 'shareUrgentCredit',
+    'hubServer', 'port', 'join', 'matchmakingKey', 'syncSmallMonsters', 'lagCompensation',
+    'shareUrgentCredit', 'ryuServers', 'ryuHost', 'ryuPassphrase', 'ryuServe', 'ryuServePort',
+    'roomServer', 'roomPassword', 'roomName', 'roomHost', 'roomServe', 'roomServePort',
     'discordRichPresence', 'discordShowHunter',
   ],
   gameplay: ['villageQuestsInHub', 'hubHp', 'bonusContent', 'hp1', 'hp2', 'hp3', 'hp4', 'quests'],
-  application: ['language', 'menuTheme', 'menuScale', 'confirmExit', 'updates'],
+  application: ['language', 'menuTheme', 'menuScale', 'confirmExit', 'updates', 'saveLocation'],
 };
 
 const fieldInfo = {
@@ -145,6 +164,23 @@ const fieldInfo = {
   fxaaMode: { label: 'FXAA mode', kind: 'select', options: ['Original', { label: '3.11', value: '3_11' }] },
   ssao: { label: 'SSAO', kind: 'toggle', help: 'Experimental depth-aware contact shadows, including around skybox edges. Needs scene depth, so flat 2D loading screens are unaffected; may reduce performance.' },
   smoothGradients: { label: 'Smooth gradients', kind: 'toggle', help: 'Uses higher-precision color for dark skies and soft glows; may cost GPU time.' },
+  hdr: { label: 'HDR output', kind: 'toggle', help: 'Enable native HDR output and tune the picture for bright displays.' },
+  hdrPeak: { label: 'Peak brightness', kind: 'number', min: 80, max: 10000, step: 10, help: 'Display peak brightness in nits.' },
+  hdrGame: { label: 'Game brightness', kind: 'number', min: 48, max: 500, step: 1, help: 'Target luminance for the in-game picture.' },
+  hdrUi: { label: 'UI brightness', kind: 'number', min: 48, max: 500, step: 1, help: 'Target luminance for the in-game UI.' },
+  hdrToneMapper: { label: 'Tone mapper', kind: 'select', options: ['Vanilla', 'None', 'RenoDRT'], help: 'Choose the HDR tonemapping curve used for the game image.' },
+  hdrGamma: { label: 'Gamma correction', kind: 'select', options: ['Off', '2.2', 'BT.1886'], help: 'Apply extra gamma adjustment for HDR display rendering.' },
+  hdrExposure: { label: 'Exposure', kind: 'number', min: 0, max: 2, step: 0.05, help: 'Use a lower value for darker scenes or a higher value for brighter output.' },
+  hdrHighlights: { label: 'Highlights', kind: 'number', min: 0, max: 100, step: 1, help: 'Adjust bright highlight intensity.' },
+  hdrShadows: { label: 'Shadows', kind: 'number', min: 0, max: 100, step: 1, help: 'Adjust shadow brightness.' },
+  hdrContrast: { label: 'Contrast', kind: 'number', min: 0, max: 100, step: 1, help: 'Adjust overall contrast.' },
+  hdrSaturation: { label: 'Saturation', kind: 'number', min: 0, max: 100, step: 1, help: 'Adjust overall color saturation.' },
+  hdrHighlightSaturation: { label: 'Highlight saturation', kind: 'number', min: 0, max: 100, step: 1, help: 'Tune saturated colours in bright highlights.' },
+  hdrFlare: { label: 'Flare', kind: 'number', min: 0, max: 100, step: 1, help: 'Strength of flare bloom effects.' },
+  hdrBloom: { label: 'Bloom', kind: 'number', min: 0, max: 100, step: 1, help: 'Overall bloom intensity.' },
+  hdrScene: { label: 'Unclamped scene', kind: 'toggle', help: 'Allow scene values to exceed standard SDR clipping for HDR.' },
+  hdrAnalysis: { label: 'HDR analysis', kind: 'toggle', help: 'Display the HDR analysis overlay while playing.' },
+  hdrFormat: { label: 'HDR format', kind: 'select', options: ['Auto', 'HDR10', 'scRGB'], help: 'Choose the output HDR format for the display pipeline.' },
   fsr: { label: 'FSR 3.1', kind: 'toggle', help: 'AMD FidelityFX Super Resolution 3.1 temporal upscaling. Renders the 3D scene at a lower resolution and reconstructs it at the output resolution; the HUD stays full resolution. MSAA and FXAA are disabled while FSR is active.' },
   fsrQuality: { label: 'FSR 3.1 quality', kind: 'select', options: ['NativeAA', 'Quality', 'Balanced', 'Performance', 'UltraPerformance'], help: 'Higher quality renders closer to the output resolution; Performance modes render faster but look softer.' },
   fsrSharpness: { label: 'FSR sharpness', kind: 'number', min: 0, max: 1, step: 0.05, help: 'Sharpening strength, from off to strongest.' },
@@ -234,6 +270,7 @@ const fieldInfo = {
   menuScale: { label: 'Interface scale (%)', kind: 'number', min: 50, max: 200, step: 10 },
   confirmExit: { label: 'Confirm exit', kind: 'toggle' },
   updates: { label: 'Updates', kind: 'select', options: ['Ask', 'Auto', 'Off'] },
+  saveLocation: { label: 'Save folder', kind: 'text', placeholder: 'Optional custom save folder', help: 'Leave blank to use the default save folder.' },
   mouseSensitivity: {
     label: 'Mouse sensitivity',
     kind: 'preset',
@@ -262,7 +299,19 @@ const fieldInfo = {
   port: { label: 'Multiplayer port', kind: 'number', min: 1, max: 65535 },
   join: { label: 'Remote hosts', kind: 'text', help: 'Comma-separated addresses of players to join.' },
   syncSmallMonsters: { label: 'Synchronize small monsters', kind: 'toggle', help: 'Keep small monster state synchronized in multiplayer.' },
+  lagCompensation: { label: 'Lag compensation', kind: 'toggle', help: 'Use the hunter’s real hit timing when the monster was seen by a different client.' },
   shareUrgentCredit: { label: 'Share Urgent quest credit', kind: 'toggle', help: 'Clearing another hunter’s Urgent quest also counts for you if you have unlocked it. Only your own save is changed.' },
+  ryuServers: { label: 'Ryujinx servers', kind: 'text', placeholder: 'host:port, host2', help: 'Comma-separated Ryujinx LDN servers to search for crossplay hubs.' },
+  ryuHost: { label: 'Ryujinx host', kind: 'text', placeholder: 'host or host:port', help: 'Use this to host a lobby on a Ryujinx server for crossplay.' },
+  ryuPassphrase: { label: 'Ryujinx passphrase', kind: 'text', placeholder: 'private group key', help: 'Optional passphrase for private Ryujinx crossplay lobbies.' },
+  ryuServe: { label: 'Run Ryujinx server', kind: 'toggle', help: 'Host a local Ryujinx LDN server while local play is open.' },
+  ryuServePort: { label: 'Ryujinx server port', kind: 'number', min: 1, max: 65535, help: 'Port for the local Ryujinx server.' },
+  roomServer: { label: 'Room server', kind: 'text', placeholder: 'host or host:port', help: 'Suyu-family room to join for crossplay.' },
+  roomPassword: { label: 'Room password', kind: 'text', help: 'Password for the room server connection.' },
+  roomName: { label: 'Room name', kind: 'text', help: 'Nickname shown in the room.' },
+  roomHost: { label: 'Host in room', kind: 'toggle', help: 'Place a hub you create into the room so emulator players can join it.' },
+  roomServe: { label: 'Run room server', kind: 'toggle', help: 'Host a local emulator room while local play is open.' },
+  roomServePort: { label: 'Room server port', kind: 'number', min: 1, max: 65535, help: 'Port for the local room server.' },
   villageQuestsInHub: { label: 'Village quests at the Hub', kind: 'toggle' },
   hubHp: { label: 'Village quest HP multiplier', kind: 'number', min: 0.05, max: 20, step: 0.05 },
   bonusContent: { label: 'Copy bonus content', kind: 'toggle', help: 'Copy bonus content from a donor save.' },
@@ -281,9 +330,10 @@ for (const [id, label] of [...movementBindings, ...buttonBindings, ...dpadBindin
 }
 
 const elements = Object.fromEntries([
-  'home-screen', 'settings-screen', 'settings-nav', 'category-title',
+  'home-screen', 'settings-screen', 'mods-screen', 'settings-nav', 'category-title',
   'field-grid', 'settings-form', 'form-error', 'unsaved-indicator', 'toast', 'build-status',
   'build-status-text', 'reset-button', 'save-button', 'save-play-button',
+  'mods-list', 'mods-search', 'mods-count', 'mod-detail-panel',
 ].map((id) => [id, document.getElementById(id)]));
 
 let settings = null;
@@ -292,6 +342,11 @@ let isDirty = false;
 let toastTimer = null;
 let listeningForBinding = null;
 let capturedMouseTarget = null;
+let mods = [];
+let selectedMod = null;
+let selectedModFiles = [];
+let selectedModDescription = '';
+let selectedModImages = [];
 
 function makeElement(tag, className, text) {
   const element = document.createElement(tag);
@@ -306,6 +361,10 @@ function showToast(message, isError = false) {
   elements.toast.classList.toggle('error', isError);
   elements.toast.classList.add('visible');
   toastTimer = setTimeout(() => elements.toast.classList.remove('visible'), 3400);
+}
+
+function errorMessage(error) {
+  return typeof error === 'string' ? error : error?.message || String(error);
 }
 
 function confirmAction(title, message, actionLabel) {
@@ -728,7 +787,7 @@ async function saveCurrentSettings(launchAfterSave = false) {
     if (launchAfterSave) await launchGame();
     return true;
   } catch (error) {
-    showToast(error.message, true);
+    showToast(errorMessage(error), true);
     return false;
   }
 }
@@ -738,22 +797,194 @@ async function launchGame() {
     await launcher.launchGame();
     await launcher.windowAction('close');
   } catch (error) {
-    showToast(error.message, true);
+    showToast(errorMessage(error), true);
   }
 }
 
 function switchScreen(screen) {
   listeningForBinding = null;
   const showSettings = screen === 'settings';
-  elements['home-screen'].hidden = showSettings;
+  const showMods = screen === 'mods';
+  elements['home-screen'].hidden = screen !== 'home';
   elements['settings-screen'].hidden = !showSettings;
+  elements['mods-screen'].hidden = !showMods;
   if (showSettings) {
     launcher.loadSettings().then((loaded) => {
       settings = loaded;
       renderCategory(activeCategory);
       setDirty(false);
-    }).catch((error) => showToast(error.message, true));
+    }).catch((error) => showToast(errorMessage(error), true));
   }
+  if (showMods) loadMods();
+}
+
+function renderMods() {
+  const query = elements['mods-search'].value.trim().toLocaleLowerCase();
+  const visible = mods.filter((mod) => mod.name.toLocaleLowerCase().includes(query));
+  elements['mods-count'].textContent = `${visible.length} MODS`;
+  elements['mods-list'].replaceChildren();
+  if (!visible.length) {
+    elements['mods-list'].append(makeElement('p', 'mods-empty', mods.length ? 'No mods match this search.' : 'No mods found.'));
+    return;
+  }
+  for (const mod of visible) {
+    const row = makeElement('button', `mod-row${selectedMod?.id === mod.id ? ' active' : ''}`);
+    row.type = 'button';
+    row.setAttribute('aria-pressed', String(selectedMod?.id === mod.id));
+    const title = makeElement('span', 'mod-row-title', mod.name);
+    const metadata = makeElement('span', 'mod-row-meta', mod.version || 'GameBanana mod');
+    const status = makeElement('span', `mod-status${mod.updateAvailable ? ' update' : mod.installed ? ' installed' : ''}`,
+      mod.updateAvailable ? 'UPDATE' : mod.installed ? 'INSTALLED' : '');
+    row.append(title, metadata, status);
+    row.addEventListener('click', () => selectMod(mod));
+    elements['mods-list'].append(row);
+  }
+}
+
+async function loadMods() {
+  const refresh = document.getElementById('mods-refresh-button');
+  refresh.disabled = true;
+  elements['mods-list'].replaceChildren(makeElement('p', 'mods-empty', 'Loading GameBanana mods…'));
+  try {
+    mods = await launcher.getMods();
+    renderMods();
+    if (selectedMod) selectedMod = mods.find((mod) => mod.id === selectedMod.id) ?? null;
+    if (selectedMod) renderModDetails();
+  } catch (error) {
+    elements['mods-list'].replaceChildren(makeElement('p', 'mods-empty error', errorMessage(error)));
+  } finally {
+    refresh.disabled = false;
+  }
+}
+
+async function selectMod(mod) {
+  selectedMod = mod;
+  selectedModFiles = [];
+  selectedModDescription = '';
+  selectedModImages = [];
+  renderMods();
+  elements['mod-detail-panel'].replaceChildren(makeElement('div', 'mod-detail-empty', 'Loading mod details…'));
+  try {
+    const details = await launcher.getModDetails(mod.id);
+    selectedModFiles = details.files;
+    selectedModDescription = details.descriptionHtml;
+    selectedModImages = details.images;
+    renderModDetails();
+  } catch (error) {
+    elements['mod-detail-panel'].replaceChildren(makeElement('p', 'mods-empty error', errorMessage(error)));
+  }
+}
+
+function renderModDetails() {
+  if (!selectedMod) return;
+  const panel = elements['mod-detail-panel'];
+  panel.replaceChildren();
+  const heading = makeElement('div', 'mod-detail-heading');
+  heading.append(makeElement('span', 'detail-kicker', selectedMod.installed ? 'INSTALLED MOD' : 'GAMEBANANA MOD'));
+  heading.append(makeElement('h2', '', selectedMod.name));
+  const version = makeElement('p', 'detail-version', selectedMod.version ? `Version ${selectedMod.version}` : 'Available downloads');
+  heading.append(version);
+  panel.append(heading);
+
+  if (selectedModImages.length) {
+    const gallery = makeElement('div', 'mod-gallery');
+    for (const preview of selectedModImages) {
+      const image = document.createElement('img');
+      image.className = 'mod-preview';
+      image.src = preview.url;
+      image.alt = preview.alt;
+      image.loading = 'lazy';
+      image.referrerPolicy = 'no-referrer';
+      gallery.append(image);
+    }
+    panel.append(gallery);
+  }
+
+  const descriptionText = modDescriptionText(selectedModDescription);
+  if (descriptionText) {
+    const description = makeElement('section', 'mod-description');
+    description.append(makeElement('h3', '', 'DESCRIPTION'));
+    description.append(makeElement('p', '', descriptionText));
+    panel.append(description);
+  }
+
+  const fileHeading = makeElement('div', 'mod-files-heading');
+  fileHeading.append(makeElement('h3', '', 'DOWNLOAD FILES'));
+  fileHeading.append(makeElement('span', '', `${selectedModFiles.length} FILES`));
+  panel.append(fileHeading);
+  const files = makeElement('div', 'mod-files');
+  selectedModFiles.forEach((file, index) => {
+    const label = makeElement('label', 'mod-file');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.name = 'mod-file';
+    checkbox.value = file.id;
+    checkbox.checked = index === selectedModFiles.length - 1;
+    const description = makeElement('span', 'mod-file-copy');
+    description.append(makeElement('strong', '', file.name));
+    description.append(makeElement('small', '', [file.version, formatFileSize(file.size)].filter(Boolean).join(' · ')));
+    label.append(checkbox, description);
+    files.append(label);
+  });
+  panel.append(files);
+  const actions = makeElement('div', 'mod-detail-actions');
+  if (!selectedMod.installed || selectedMod.updateAvailable) {
+    const install = makeElement('button', 'primary-button', selectedMod.updateAvailable ? 'INSTALL UPDATE' : 'INSTALL SELECTED');
+    install.type = 'button';
+    install.addEventListener('click', async () => {
+      const fileIds = [...files.querySelectorAll('input:checked')].map((input) => input.value);
+      if (!fileIds.length) { showToast('Select at least one download file.', true); return; }
+      install.disabled = true;
+      install.textContent = 'INSTALLING…';
+      try {
+        await launcher.installMod(selectedMod.id, fileIds);
+        const installedModId = selectedMod.id;
+        showToast(`${selectedMod.name} installed in mods/.`);
+        await loadMods();
+        selectedMod = mods.find((mod) => mod.id === installedModId) ?? null;
+        if (selectedMod) await selectMod(selectedMod);
+      } catch (error) {
+        showToast(errorMessage(error), true);
+        install.disabled = false;
+        install.textContent = 'TRY AGAIN';
+      }
+    });
+    actions.append(install);
+  }
+  if (selectedMod.installed) {
+    const remove = makeElement('button', 'danger-button', 'REMOVE MOD');
+    remove.type = 'button';
+    remove.addEventListener('click', async () => {
+      const mod = selectedMod;
+      if (!await confirmAction('Remove mod?', `Remove ${mod.name} from the launcher's mods folder?`, 'REMOVE')) return;
+      remove.disabled = true;
+      remove.textContent = 'REMOVING…';
+      try {
+        await launcher.removeMod(mod.id);
+        showToast(`${mod.name} removed from mods/.`);
+        await loadMods();
+        selectedMod = mods.find((item) => item.id === mod.id) ?? null;
+        if (selectedMod) await selectMod(selectedMod);
+      } catch (error) {
+        showToast(errorMessage(error), true);
+        remove.disabled = false;
+        remove.textContent = 'TRY AGAIN';
+      }
+    });
+    actions.append(remove);
+  }
+  panel.append(actions);
+}
+
+function modDescriptionText(markup) {
+  const parsed = new DOMParser().parseFromString(markup, 'text/html');
+  parsed.querySelectorAll('script, style, iframe, object').forEach((element) => element.remove());
+  return (parsed.body.innerText || parsed.body.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) return '';
+  return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.ceil(bytes / 1024)} KB`;
 }
 
 function applyTheme(theme) {
@@ -762,17 +993,21 @@ function applyTheme(theme) {
 
 function setupActions() {
   document.getElementById('play-button').addEventListener('click', launchGame);
+  document.getElementById('mods-button').addEventListener('click', () => switchScreen('mods'));
   document.getElementById('settings-button').addEventListener('click', () => switchScreen('settings'));
   document.getElementById('exit-button').addEventListener('click', () => launcher.windowAction('close'));
   document.getElementById('back-button').addEventListener('click', async () => {
     if (isDirty && !await confirmAction('Leave settings?', 'Your changes have not been saved.', 'LEAVE')) return;
     switchScreen('home');
   });
+  document.getElementById('mods-back-button').addEventListener('click', () => switchScreen('home'));
+  document.getElementById('mods-refresh-button').addEventListener('click', loadMods);
+  elements['mods-search'].addEventListener('input', renderMods);
   document.getElementById('open-ini-button').addEventListener('click', async () => {
     try {
       await launcher.openIni();
     } catch (error) {
-      showToast(error.message, true);
+      showToast(errorMessage(error), true);
     }
   });
   document.getElementById('settings-form').addEventListener('submit', (event) => event.preventDefault());
@@ -787,13 +1022,13 @@ function setupActions() {
       settings = defaults;
       renderCategory(activeCategory);
       setDirty(true);
-    }).catch((error) => showToast(error.message, true));
+    }).catch((error) => showToast(errorMessage(error), true));
   });
   for (const button of document.querySelectorAll('[data-window-action]')) {
     button.addEventListener('click', () => launcher.windowAction(button.dataset.windowAction));
   }
   document.querySelector('.titlebar').addEventListener('mousedown', (event) => {
-    if (event.button === 0 && !event.target.closest('.window-action')) currentWindow.startDragging();
+    if (hasTauriRuntime && event.button === 0 && !event.target.closest('.window-action')) currentWindow.startDragging();
   });
 }
 
@@ -816,7 +1051,7 @@ async function initialize() {
       elements['build-status-text'].textContent = 'GAME FILES READY';
     }
   } catch (error) {
-    showToast(error.message, true);
+    showToast(errorMessage(error), true);
   }
 }
 
